@@ -1,0 +1,638 @@
+openapi: 3.0.3
+info:
+  title: asyou Management API
+  version: v1
+servers:
+  - url: /api/v1
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /auth/login:
+    post:
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+  /users/me:
+    get:
+      summary: Get current user
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /nodes:
+    post:
+      summary: Create a frps node
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeCreate'
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+    get:
+      summary: List nodes
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Node'
+  /nodes/{id}:
+    get:
+      summary: Get node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+    put:
+      summary: Update node (partial)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeUpdate'
+      responses:
+        '200':
+          description: updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+    delete:
+      summary: Delete node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '204':
+          description: deleted
+  /nodes/{id}/heartbeat:
+    post:
+      summary: Node heartbeat (auth by node token header)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeHeartbeat'
+      responses:
+        '204':
+          description: accepted
+  /nodes/{id}/proxies/{proxy_id}/stats:
+    post:
+      summary: Ingest proxy stats (auth by node token header)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: proxy_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProxyStatsIngest'
+      responses:
+        '201':
+          description: created
+  /proxies:
+    post:
+      summary: Create proxy
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProxyCreate'
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proxy'
+    get:
+      summary: List proxies for user
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Proxy'
+  /proxies/{id}:
+    get:
+      summary: Get proxy
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: proxy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proxy'
+    put:
+      summary: Update proxy
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProxyUpdate'
+      responses:
+        '200':
+          description: updated
+    delete:
+      summary: Delete proxy
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '204':
+          description: deleted
+  /proxies/{id}/action:
+    post:
+      summary: Control proxy lifecycle (start/stop/reload)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum: [start, stop, reload]
+      responses:
+        '202':
+          description: accepted
+  /proxies/{id}/stats:
+    get:
+      summary: List proxy stats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: stats list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProxyStats'
+    post:
+      summary: Ingest proxy stats (user-authenticated)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProxyStatsIngest'
+      responses:
+        '201':
+          description: created
+  /audit-logs:
+    get:
+      summary: List audit logs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: audit log list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLog'
+  /api-keys:
+    post:
+      summary: Create a new API key
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCreate'
+      responses:
+        '201':
+          description: created (token returned once)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+    get:
+      summary: List user's API keys
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApiKey'
+  /api-keys/{id}:
+    delete:
+      summary: Revoke an API key
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '204':
+          description: revoked
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      responses:
+        '200':
+          description: metrics
+          content:
+            text/plain: {}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        display_name:
+          type: string
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        expires_in:
+          type: integer
+        token_type:
+          type: string
+          default: bearer
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        display_name:
+          type: string
+        role:
+          type: string
+    NodeCreate:
+      type: object
+      required: [name, host]
+      properties:
+        name:
+          type: string
+        host:
+          type: string
+        api_port:
+          type: integer
+        bind_port:
+          type: integer
+        tls_enabled:
+          type: boolean
+        auth_token:
+          type: string
+    NodeUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        host:
+          type: string
+        api_port:
+          type: integer
+        bind_port:
+          type: integer
+        tls_enabled:
+          type: boolean
+        auth_token:
+          type: string
+    Node:
+      allOf:
+        - $ref: '#/components/schemas/NodeCreate'
+        - type: object
+          properties:
+            id:
+              type: integer
+            last_heartbeat:
+              type: string
+              format: date-time
+    NodeHeartbeat:
+      type: object
+      properties:
+        uptime:
+          type: integer
+        connections:
+          type: integer
+        load:
+          type: number
+    ProxyCreate:
+      type: object
+      required: [name, type, local_port]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [tcp, http, https, udp, stcp, xtcp, tcpmux]
+        local_ip:
+          type: string
+          default: '127.0.0.1'
+        local_port:
+          type: integer
+        remote_port:
+          type: integer
+        subdomain:
+          type: string
+        custom_domains:
+          type: array
+          items:
+            type: string
+        node_id:
+          type: integer
+    Proxy:
+      allOf:
+        - $ref: '#/components/schemas/ProxyCreate'
+        - type: object
+          properties:
+            id:
+              type: integer
+            user_id:
+              type: integer
+            status:
+              type: string
+            annotations:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+    ProxyUpdate:
+      type: object
+      properties:
+        local_port:
+          type: integer
+        remote_port:
+          type: integer
+        subdomain:
+          type: string
+        custom_domains:
+          type: array
+          items:
+            type: string
+    ProxyStatsIngest:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        bytes_in:
+          type: integer
+        bytes_out:
+          type: integer
+        conn_count:
+          type: integer
+    ProxyStats:
+      type: object
+      properties:
+        id:
+          type: integer
+        proxy_id:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        bytes_in:
+          type: integer
+        bytes_out:
+          type: integer
+        conn_count:
+          type: integer
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        actor_user_id:
+          type: integer
+          nullable: true
+        action_type:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: integer
+          nullable: true
+        detail:
+          type: string
+        ip:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        name:
+          type: string
+        scopes:
+          type: string
+        revoked:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    ApiKeyCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        scopes:
+          type: string

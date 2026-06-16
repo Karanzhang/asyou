@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+*.exe
+*.exe~
+*.test
+*.out
+
+# Node
+node_modules/
+dist/
+
+# Wails
+desktop/build/
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Temp
+tmp/

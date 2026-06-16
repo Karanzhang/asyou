@@ -1,0 +1,23 @@
+{
+  "name": "asyou-sdk",
+  "version": "0.1.0",
+  "description": "Node.js SDK for asyou tunnel management API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/node-fetch": "^2.6.13",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  }
+}
