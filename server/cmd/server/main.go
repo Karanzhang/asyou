@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/asyou/server/internal/db"
 	"github.com/asyou/server/internal/frp"
 	"github.com/asyou/server/internal/handlers"
