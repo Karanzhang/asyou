@@ -185,22 +185,36 @@ local_port = %d
 	}
 
 	// Find frpc binary
-	frpcPath := "frpc"
-	if _, err := exec.LookPath("frpc"); err != nil {
-		// Check common paths
-		candidates := []string{
-			filepath.Join(filepath.Dir(os.Args[0]), "frpc"),
-			filepath.Join(filepath.Dir(os.Args[0]), "frpc.exe"),
-			"C:\\Windows\\System32\\frpc.exe",
-			"/usr/local/bin/frpc",
-			"/usr/bin/frpc",
+	frpcPath := ""
+	candidates := []string{
+		"frpc",
+		filepath.Join(filepath.Dir(os.Args[0]), "frpc"),
+		filepath.Join(filepath.Dir(os.Args[0]), "frpc.exe"),
+		"C:\\Windows\\System32\\frpc.exe",
+		"/usr/local/bin/frpc",
+		"/usr/bin/frpc",
+	}
+	for _, c := range candidates {
+		if path, err := exec.LookPath(c); err == nil {
+			frpcPath = path
+			break
 		}
-		for _, c := range candidates {
-			if _, err := os.Stat(c); err == nil {
-				frpcPath = c
-				break
-			}
+		if _, err := os.Stat(c); err == nil {
+			frpcPath = c
+			break
 		}
+	}
+
+	if frpcPath == "" {
+		fmt.Fprintln(os.Stderr, "Error: frpc not found.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Install frpc manually:")
+		fmt.Fprintln(os.Stderr, "  Windows: Download from https://github.com/fatedier/frp/releases")
+		fmt.Fprintln(os.Stderr, "           and place frpc.exe in C:\\Windows\\System32\\")
+		fmt.Fprintln(os.Stderr, "  Linux:   sudo cp frpc /usr/local/bin/frpc")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintf(os.Stderr, "Or run frpc directly with the config at:\n  %s -c %s\n", "frpc", cfgPath)
+		os.Exit(1)
 	}
 
 	cmd := exec.Command(frpcPath, "-c", cfgPath)
@@ -208,6 +222,7 @@ local_port = %d
 	cmd.Stderr = os.Stderr
 	fmt.Printf("Tunnel #%d '%s' created. Starting frpc locally...\n", proxy.ID, proxy.Name)
 	fmt.Printf("Config: %s\n", cfgPath)
+	fmt.Printf("frpc:  %s\n", frpcPath)
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "frpc exited: %v\n", err)
 		os.Exit(1)
