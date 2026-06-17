@@ -54,6 +54,10 @@ func RunMigrations(db *sql.DB, migrationsDir string) error {
 			continue
 		}
 		if _, err := db.Exec(sqls); err != nil {
+			// Ignore "duplicate column" errors from ALTER TABLE ADD COLUMN
+			if strings.Contains(err.Error(), "duplicate column name") {
+				continue
+			}
 			return fmt.Errorf("exec %s: %w", f, err)
 		}
 		// Mark as applied
