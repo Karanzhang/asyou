@@ -16,8 +16,13 @@ import (
 
 func main() {
 	cwd, _ := os.Getwd()
-	migrationsDir := filepath.Join(cwd, "..", "migrations")
-	dbPath := filepath.Join(cwd, "..", "asyou.db")
+	// Try local paths first (systemd: /var/lib/asyou/),
+	// fall back to parent paths (dev: server/../)
+	migrationsDir := filepath.Join(cwd, "migrations")
+	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
+		migrationsDir = filepath.Join(cwd, "..", "migrations")
+	}
+	dbPath := filepath.Join(cwd, "asyou.db")
 	log.Printf("migrations dir: %s", migrationsDir)
 	dbConn, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
