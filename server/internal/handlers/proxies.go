@@ -109,9 +109,9 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
         if req.NodeID != nil {
             nodeID = *req.NodeID
         }
-        res, err := s.DB.Exec(`INSERT INTO proxies (user_id, node_id, name, type, local_ip, local_port, remote_port, subdomain, custom_domains, enable_tls, status, annotations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 1, nodeID, req.Name, req.Type, localIP, req.LocalPort, req.RemotePort, req.Subdomain, cdoms, 0, "stopped", "")
+        res, err := s.DB.Exec(`INSERT INTO proxies (user_id, node_id, name, type, local_ip, local_port, remote_port, subdomain, custom_domains, enable_tls, status, annotations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, mustGetUserID(r), nodeID, req.Name, req.Type, localIP, req.LocalPort, req.RemotePort, req.Subdomain, cdoms, 0, "stopped", "")
         if err != nil {
-            writeJSONError(w, "cannot create proxy", "INTERNAL", http.StatusInternalServerError)
+            writeJSONError(w, "cannot create proxy: "+err.Error(), "INTERNAL", http.StatusInternalServerError)
             return
         }
         newID, _ := res.LastInsertId()
