@@ -170,6 +170,15 @@ func (c *Client) ListNodes() ([]Node, error) {
 	return list, nil
 }
 
+// GetNode returns a single node by ID.
+func (c *Client) GetNode(id int64) (*Node, error) {
+	var n Node
+	if err := c.do("GET", fmt.Sprintf("/api/v1/nodes/%d", id), nil, &n); err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
 // GetVersion returns server and frp version information.
 func (c *Client) GetVersion() (map[string]interface{}, error) {
 	var info map[string]interface{}

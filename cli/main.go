@@ -146,12 +146,72 @@ func cmdExpose() {
 		os.Exit(1)
 	}
 
-	if err := client.ProxyAction(proxy.ID, "start"); err != nil {
-		fmt.Fprintf(os.Stderr, "start failed: %v\n", err)
+	// Get node info for frpc config
+	var frpsHost string
+	var frpsPort int
+	if *nodeID > 0 {
+		node, err := client.GetNode(int64(*nodeID))
+		if err == nil {
+			frpsHost = node.Host
+			frpsPort = node.BindPort
+		}
+	}
+	if frpsHost == "" {
+		// Try to parse from saved server URL
+		frpsHost = "127.0.0.1"
+		frpsPort = 7000
+	}
+	if frpsPort == 0 {
+		frpsPort = 7000
+	}
+
+	// Generate frpc config and run locally
+	cfgDir, _ := os.UserConfigDir()
+	cfgPath := filepath.Join(cfgDir, "asyou", fmt.Sprintf("proxy-%d.ini", proxy.ID))
+	os.MkdirAll(filepath.Dir(cfgPath), 0755)
+
+	iniContent := fmt.Sprintf(`[common]
+server_addr = %s
+server_port = %d
+
+[%s]
+type = tcp
+local_ip = 127.0.0.1
+local_port = %d
+`, frpsHost, frpsPort, tunnelName, port)
+	if err := os.WriteFile(cfgPath, []byte(iniContent), 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "write config failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Tunnel #%d '%s' created and started on port %d\n", proxy.ID, proxy.Name, port)
+	// Find frpc binary
+	frpcPath := "frpc"
+	if _, err := exec.LookPath("frpc"); err != nil {
+		// Check common paths
+		candidates := []string{
+			filepath.Join(filepath.Dir(os.Args[0]), "frpc"),
+			filepath.Join(filepath.Dir(os.Args[0]), "frpc.exe"),
+			"C:\\Windows\\System32\\frpc.exe",
+			"/usr/local/bin/frpc",
+			"/usr/bin/frpc",
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				frpcPath = c
+				break
+			}
+		}
+	}
+
+	cmd := exec.Command(frpcPath, "-c", cfgPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	fmt.Printf("Tunnel #%d '%s' created. Starting frpc locally...\n", proxy.ID, proxy.Name)
+	fmt.Printf("Config: %s\n", cfgPath)
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "frpc exited: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func cmdList() {
