@@ -147,6 +147,13 @@ func cmdExpose() {
 		os.Exit(1)
 	}
 
+	// If server didn't assign a remote port in the create response, fetch it
+	if proxy.RemotePort == nil || *proxy.RemotePort == 0 {
+		if fetched, err := client.GetProxy(proxy.ID); err == nil && fetched.RemotePort != nil && *fetched.RemotePort > 0 {
+			proxy = fetched
+		}
+	}
+
 	// Get node info for frpc config
 	var frpsHost string
 	var frpsPort int
