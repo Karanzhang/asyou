@@ -109,16 +109,12 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
         if req.NodeID != nil {
             nodeID = *req.NodeID
         }
-        // Auto-assign remote port if not specified: use a fixed starting port
-        // frps will allocate it if available
-        remotePortVal := req.RemotePort
-        if remotePortVal == nil && req.NodeID != nil {
-            // Start from 31000 and try to find the first available
-            for p := 31000; p < 31100; p++ {
-                freePort := p
-                remotePortVal = &freePort
-                break
-            }
+        // Auto-assign remote port if not specified
+        var remotePortVal interface{}
+        if req.RemotePort != nil {
+            remotePortVal = *req.RemotePort
+        } else if req.NodeID != nil {
+            remotePortVal = 31000
         }
         res, err := s.DB.Exec(`INSERT INTO proxies (user_id, node_id, name, type, local_ip, local_port, remote_port, subdomain, custom_domains, enable_tls, status, annotations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, mustGetUserID(r), nodeID, req.Name, req.Type, localIP, req.LocalPort, remotePortVal, req.Subdomain, cdoms, 0, "stopped", "")
         if err != nil {
