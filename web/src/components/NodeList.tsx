@@ -16,8 +16,18 @@ export default function NodeList() {
   }
 
   const load = useCallback(async () => {
-    try { setNodes(await listNodes()) }
-    catch { showToast('Failed to load nodes', 'error') }
+    try {
+      const nodeList = await listNodes()
+      setNodes(nodeList)
+      // Load live status for all nodes in parallel
+      nodeList.forEach(n => {
+        getNodeStatus(n.id).then(data => {
+          setStatuses(prev => ({ ...prev, [n.id]: data }))
+        }).catch(() => {})
+      })
+    } catch {
+      showToast('Failed to load nodes', 'error')
+    }
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -53,6 +63,12 @@ export default function NodeList() {
   }
 
   const isOnline = (n: AsyouNode) => {
+    // Prefer live status from frps admin API
+    const st = statuses[n.id]
+    if (st?.server_info) {
+      return true // successfully reached frps admin API
+    }
+    // Fall back to heartbeat from DB
     if (!n.last_heartbeat) return false
     const diff = Date.now() - new Date(n.last_heartbeat).getTime()
     return diff < 5 * 60 * 1000 // 5 min threshold

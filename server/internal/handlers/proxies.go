@@ -3,6 +3,7 @@ package handlers
 import (
     "database/sql"
     "encoding/json"
+    "fmt"
     "net/http"
     "path"
     "strconv"
@@ -84,6 +85,36 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
             }
             list = append(list, p)
         }
+
+        // Live status check: group stopped proxies by node, query frps once per node
+        type nodeProxies struct {
+            ids     map[int]struct{}
+            names   map[string]int // proxy name → index in list
+        }
+        nodeMap := make(map[int64]*nodeProxies)
+        for i := range list {
+            if list[i].Status != "stopped" || list[i].NodeID == nil {
+                continue
+            }
+            nid := *list[i].NodeID
+            if nodeMap[nid] == nil {
+                nodeMap[nid] = &nodeProxies{ids: map[int]struct{}{}, names: make(map[string]int)}
+            }
+            nodeMap[nid].ids[i] = struct{}{}
+            nodeMap[nid].names[list[i].Name] = i
+        }
+        for nid, np := range nodeMap {
+            proxies, err := s.fetchNodeProxies(nid)
+            if err != nil {
+                continue
+            }
+            for _, p := range proxies {
+                if idx, ok := np.names[p.Name]; ok && p.Status == "online" {
+                    list[idx].Status = "running (local)"
+                }
+            }
+        }
+
         w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(list)
     case http.MethodPost:
@@ -590,17 +621,14 @@ func (s *Server) loadNode(nodeID *int64) (*model.Node, error) {
     return &n, nil
 }
 
-// checkProxyLiveStatus queries frps admin API to check if a proxy is actually running.
-func (s *Server) checkProxyLiveStatus(nodeID int64, proxyName string) string {
-    var dashPort, bindPort sql.NullInt64
+// fetchNodeProxies queries frps admin API for all active proxies on a node.
+func (s *Server) fetchNodeProxies(nodeID int64) ([]frps.ProxyEntry, error) {
+    var dashPort sql.NullInt64
     var host, dashUser, dashPwd sql.NullString
-    err := s.DB.QueryRow(`SELECT host, bind_port, dashboard_port, dashboard_user, dashboard_pwd FROM nodes WHERE id = ?`, nodeID).
-        Scan(&host, &bindPort, &dashPort, &dashUser, &dashPwd)
-    if err != nil {
-        return ""
-    }
-    if !host.Valid || host.String == "" {
-        return ""
+    err := s.DB.QueryRow(`SELECT host, dashboard_port, dashboard_user, dashboard_pwd FROM nodes WHERE id = ?`, nodeID).
+        Scan(&host, &dashPort, &dashUser, &dashPwd)
+    if err != nil || !host.Valid || host.String == "" {
+        return nil, fmt.Errorf("node not found")
     }
     apiPort := 7500
     if dashPort.Valid {
@@ -615,7 +643,12 @@ func (s *Server) checkProxyLiveStatus(nodeID int64, proxyName string) string {
         pwd = dashPwd.String
     }
     client := frps.NewAdminClientWithAuth(host.String, apiPort, user, pwd)
-    list, err := client.ListAllProxies()
+    return client.ListAllProxies()
+}
+
+// checkProxyLiveStatus queries frps admin API to check if a proxy is actually running.
+func (s *Server) checkProxyLiveStatus(nodeID int64, proxyName string) string {
+    list, err := s.fetchNodeProxies(nodeID)
     if err != nil {
         return ""
     }
