@@ -15,10 +15,12 @@
 - **CLI Tool** — `asyou` command-line tool for scripting and CI/CD
 - **Desktop App** — Wails-based desktop client with port discovery and system tray
 - **Multi-Protocol** — TCP, HTTP, HTTPS, UDP tunnel support
+- **Multi-Node Cluster** — Orchestrate multiple frps instances across regions
+- **Smart Scheduling** — Auto-select best node by weight, geo-proximity, capacity, latency
 - **Multi-Tenancy** — User roles (`user` / `admin`) with tenant isolation
-- **Global Scheduling** — Geo-aware node selection based on latency, load, and proximity
 - **Real-Time Updates** — Server-Sent Events (SSE) push for live status and traffic
 - **ACME Certificates** — Automated TLS certificate provisioning via Let's Encrypt
+- **Auto-Download frpc** — Web dashboard generates run scripts that download frpc automatically
 - **API & SDKs** — REST API + Go / Python / Node.js SDKs
 - **Prometheus Metrics** — `/api/v1/metrics` endpoint for monitoring
 
@@ -29,13 +31,21 @@ flowchart TB
     A[Desktop App] --> S[Management Server]
     B[Web Dashboard] --> S
     C[CLI/SDK] --> S
-    S --> F[Enhanced frp Core]
-    F --> Internet
+    S --> 1[frps Node 1]
+    S --> 2[frps Node 2]
+    S --> 3[frps Node 3]
+    subgraph Internet[Internet / End Users]
+        U1[User]
+        U2[User]
+    end
+    1 --> Internet
+    2 --> Internet
+    3 --> Internet
 ```
 
 | Component | Description |
 |-----------|-------------|
-| `server/` | Management API (JWT auth, multi-tenancy, SSE, scheduling) |
+| `server/` | Management API (JWT auth, multi-tenancy, SSE, geo-scheduler) |
 | `web/` | React + Vite + Recharts Dashboard |
 | `desktop/` | Wails desktop app (embedded frpc, port discovery) |
 | `cli/` | Go CLI (`login`, `expose`, `list`, `delete`, `nodes`) |
@@ -92,7 +102,7 @@ asyou/
 ├── server/           # Management server (Go)
 │   ├── cmd/          # Entry point
 │   ├── internal/     # Handlers, middleware, models, frp manager
-│   └── server/migrations/   # SQLite schema
+│   └── migrations/   # SQLite schema
 ├── web/              # React Dashboard (Vite + TypeScript)
 │   └── src/
 │       ├── api/      # REST client
@@ -107,7 +117,8 @@ asyou/
 │   ├── python/
 │   └── node/
 ├── core/             # frpc/frps management
-│   └── frpc/         # frpc lifecycle, config, metrics
+│   ├── frpc/         # frpc lifecycle, config, metrics
+│   └── frps/         # frps lifecycle, config generation, admin client
 ├── docs/             # Documentation
 │   ├── DESIGN.md     # Architecture & design
 │   ├── USER_GUIDE.md # Full user guide (English)

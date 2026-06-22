@@ -7,26 +7,36 @@ Deploy the asyou management server + frps to a public server, making your tunnel
 ## 1. Architecture Overview
 
 ```
-                        Public Server (Your VPS)
-            ┌─────────────────────────────────────────────┐
-            │                                             │
-            │  asyou server  ────  frps                   │
-            │  :8080 (API)     :7000 (tunnel)             │
-            │       │                │                    │
-            │       ▼                ▼                    │
-            │  Nginx/Caddy                                │
-            │  :443 (HTTPS)                               │
-            └──────────────────┬──────────────────────────┘
+                          ┌──────────────────────────────────────┐
+                          │         asyou Management Server      │
+                          │  :8080 (API + Web Dashboard)         │
+                          │  ┌────────┐ ┌────────┐ ┌──────────┐ │
+                          │  │ Auth   │ │ Proxy  │ │Scheduler │ │
+                          │  │ JWT    │ │ CRUD   │ │Geo+Weight│ │
+                          │  └────────┘ └────┬───┘ └────┬─────┘ │
+                          └──────────────────┼───────────┼───────┘
+                                             │           │
+                    ┌────────────────────────┼───────────┼──────────────┐
+                    │                        │           │              │
+               ┌────▼────┐            ┌──────▼────┐ ┌───▼────┐  ┌─────▼─────┐
+               │ VPS 1   │            │  VPS 2    │ │ VPS 3  │  │  ...      │
+               │ frps    │            │  frps     │ │ frps   │  │           │
+               │ :7001   │            │  :7002    │ │ :7003  │  │           │
+               │ HK      │            │  Tokyo    │ │ US-West│  │           │
+               └────┬────┘            └──────┬────┘ └───┬────┘  └─────┬─────┘
+                    │                        │          │              │
+                    └──────────┬─────────────┴──────────┴──────────────┘
                                │
-              ┌────────────────┼────────────────┐
-              │                │                │
-         Local Machine 1  Local Machine 2   Browser
-         (frpc)           (frpc)            (Dashboard)
+                 ┌─────────────┼────────────────┐
+                 │             │                │
+            Local Machine  Local Machine    Browser
+            (frpc)         (frpc)           (Dashboard)
 ```
 
-- **asyou server**: Management API + Web Dashboard
-- **frps**: Tunnel ingress service (can be on the same machine as asyou or separate)
-- **frpc**: Runs on machines that need to expose services, automatically managed by asyou
+- **asyou server**: Management API + Web Dashboard + Node Scheduler
+- **frps nodes**: Multiple tunnel ingress servers (different VPS, regions, or ports)
+- **Scheduler**: Auto-selects best node based on weight, geo-proximity, capacity, latency
+- **frpc**: Runs on machines that need to expose services, connects to the assigned frps
 
 ---
 
@@ -49,7 +59,7 @@ Deploy the asyou management server + frps to a public server, making your tunnel
 | 22 | SSH | Remote administration |
 | 80 | HTTP | ACME validation + redirect to HTTPS |
 | 443 | HTTPS | Web Dashboard + API |
-| 7000-7100 | frps | Tunnel ports (as needed) |
+| 7000-7100 | frps | Tunnel ports for multiple nodes |
 | 8080 | asyou API | Internal / reverse proxy use |
 
 ---
@@ -149,12 +159,12 @@ curl http://localhost:8080/
 
 ## 5.3 Single-Server Cluster Simulation
 
-一台机器上跑多个 frps 实例（端口不同），模拟多节点集群，用来测试调度器、故障转移等。
+Run multiple frps instances on a single machine (different ports) to simulate a multi-node cluster for testing the scheduler, failover, etc.
 
-### 5.3.1 创建多个 frps 配置
+### 5.3.1 Create frps Configurations
 
 ```bash
-# 节点 1 — 主节点
+# Node 1 — Primary
 sudo tee /etc/frps-node1.toml << 'EOF'
 [common]
 bind_addr = "0.0.0.0"
@@ -171,7 +181,7 @@ log_level = "info"
 log_max_days = 7
 EOF
 
-# 节点 2 — 备用节点
+# Node 2 — Standby
 sudo tee /etc/frps-node2.toml << 'EOF'
 [common]
 bind_addr = "0.0.0.0"
@@ -188,7 +198,7 @@ log_level = "info"
 log_max_days = 7
 EOF
 
-# 节点 3 — 低优先级节点（weight 小，模拟性能差）
+# Node 3 — Low priority (low weight, simulates poor performance)
 sudo tee /etc/frps-node3.toml << 'EOF'
 [common]
 bind_addr = "0.0.0.0"
@@ -206,65 +216,65 @@ log_max_days = 7
 EOF
 ```
 
-### 5.3.2 启动所有 frps 实例
+### 5.3.2 Start All frps Instances
 
 ```bash
 sudo frps -c /etc/frps-node1.toml &
 sudo frps -c /etc/frps-node2.toml &
 sudo frps -c /etc/frps-node3.toml &
 
-# 验证全部启动
+# Verify all started
 ss -tlnp | grep frps
-# 应看到 7001 7002 7003 7501 7502 7503
+# Should show 7001 7002 7003 7501 7502 7503
 ```
 
-### 5.3.3 注册节点到 asyou
+### 5.3.3 Register Nodes with asyou
 
 ```bash
-# 先登录（获取 token）
+# First login (get token)
 LOGIN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@example.com","password":"your-password"}')
 TOKEN=$(echo "$LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 AUTH="Authorization: Bearer $TOKEN"
 
-# 注册节点 1（权重 1.0 = 正常）
+# Register node 1 (weight 1.0 = normal)
 curl -X POST http://localhost:8080/api/v1/nodes \
   -H "$AUTH" -H "Content-Type: application/json" \
   -d '{"name":"hk-main","host":"YOUR_SERVER_IP","api_port":7501,"bind_port":7001,"auth_token":"node1-secret","region":"ap-east","country":"HK","city":"Hong Kong","latitude":22.3193,"longitude":114.1694,"max_connections":100,"weight":1.0}'
 
-# 注册节点 2（权重 0.8 = 少分配一些）
+# Register node 2 (weight 0.8 = fewer tunnels assigned)
 curl -X POST http://localhost:8080/api/v1/nodes \
   -H "$AUTH" -H "Content-Type: application/json" \
   -d '{"name":"hk-standby","host":"YOUR_SERVER_IP","api_port":7502,"bind_port":7002,"auth_token":"node2-secret","region":"ap-east","country":"HK","city":"Hong Kong","latitude":22.3193,"longitude":114.1694,"max_connections":80,"weight":0.8}'
 
-# 注册节点 3（权重 0.3 = 低优先级）
+# Register node 3 (weight 0.3 = low priority)
 curl -X POST http://localhost:8080/api/v1/nodes \
   -H "$AUTH" -H "Content-Type: application/json" \
   -d '{"name":"hk-low","host":"YOUR_SERVER_IP","api_port":7503,"bind_port":7003,"auth_token":"node3-secret","region":"ap-east","country":"HK","city":"Hong Kong","latitude":22.3193,"longitude":114.1694,"max_connections":50,"weight":0.3}'
 ```
 
-### 5.3.4 验证
+### 5.3.4 Verification
 
 ```bash
-# 查看节点列表
+# List nodes via API
 curl -s http://localhost:8080/api/v1/nodes -H "$AUTH" | python3 -m json.tool
 
-# CLI 查看
+# List nodes via CLI
 ./asyou nodes
 
-# 示例输出：
+# Expected output:
 # ID   Name          Host              Port
 # 1    hk-main       YOUR_SERVER_IP    7001
 # 2    hk-standby    YOUR_SERVER_IP    7002
 # 3    hk-low        YOUR_SERVER_IP    7003
 
-# 创建隧道（不指定节点，调度器自动选最优）
+# Create a tunnel (no node specified — scheduler auto-selects best node)
 ./asyou expose 3000 -n my-app
 # → auto-selected node #1 "hk-main" (highest weight)
 ```
 
-调度器会根据 `weight`、`max_connections`、延迟等自动分配隧道到不同 frps 实例。可以通过调整这些参数模拟不同场景。
+The scheduler assigns tunnels to frps instances based on `weight`, `max_connections`, latency, etc. Adjust these parameters to simulate different scenarios.
 
 ---
 
