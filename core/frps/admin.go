@@ -34,6 +34,8 @@ type ProxyEntry struct {
 type AdminClient struct {
 	BaseURL    string
 	HTTPClient *http.Client
+	Username   string
+	Password   string
 }
 
 // NewAdminClient creates a client for frps admin at address:port.
@@ -41,6 +43,16 @@ func NewAdminClient(addr string, port int) *AdminClient {
 	return &AdminClient{
 		BaseURL: fmt.Sprintf("http://%s:%d", addr, port),
 		HTTPClient: &http.Client{Timeout: 5 * time.Second},
+	}
+}
+
+// NewAdminClientWithAuth creates a client with dashboard credentials.
+func NewAdminClientWithAuth(addr string, port int, user, pwd string) *AdminClient {
+	return &AdminClient{
+		BaseURL:    fmt.Sprintf("http://%s:%d", addr, port),
+		HTTPClient: &http.Client{Timeout: 5 * time.Second},
+		Username:   user,
+		Password:   pwd,
 	}
 }
 
@@ -62,6 +74,33 @@ func (c *AdminClient) ListProxies(proxyType string) ([]ProxyEntry, error) {
 	return list, nil
 }
 
+// ListAllProxies fetches all proxy types from frps.
+func (c *AdminClient) ListAllProxies() ([]ProxyEntry, error) {
+	all := make([]ProxyEntry, 0)
+	for _, t := range []string{"tcp", "http", "https", "udp", "stcp", "xtcp"} {
+		list, err := c.ListProxies(t)
+		if err != nil {
+			continue
+		}
+		all = append(all, list...)
+	}
+	return all, nil
+}
+
+// GetProxyStats returns traffic stats for a specific proxy by name.
+func (c *AdminClient) GetProxyStats(proxyType, name string) (*ProxyEntry, error) {
+	list, err := c.ListProxies(proxyType)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range list {
+		if p.Name == name {
+			return &p, nil
+		}
+	}
+	return nil, fmt.Errorf("proxy %s not found", name)
+}
+
 // HealthCheck returns true if frps admin responds.
 func (c *AdminClient) HealthCheck() bool {
 	resp, err := c.HTTPClient.Get(c.BaseURL + "/healthz")
@@ -73,7 +112,14 @@ func (c *AdminClient) HealthCheck() bool {
 }
 
 func (c *AdminClient) get(path string, dest interface{}) error {
-	resp, err := c.HTTPClient.Get(c.BaseURL + path)
+	req, err := http.NewRequest("GET", c.BaseURL+path, nil)
+	if err != nil {
+		return fmt.Errorf("frps admin create request: %w", err)
+	}
+	if c.Username != "" || c.Password != "" {
+		req.SetBasicAuth(c.Username, c.Password)
+	}
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("frps admin GET %s: %w", path, err)
 	}

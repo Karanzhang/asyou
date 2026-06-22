@@ -1,4 +1,4 @@
-import type { User, Node, Proxy, ProxyStats, AuditLog, ApiKey } from '../types'
+import type { User, Node, Proxy, ProxyStats, AuditLog, ApiKey, NodeStatusResponse } from '../types'
 
 const BASE = '/api/v1'
 
@@ -76,6 +76,10 @@ export function createNode(data: Partial<Node>) {
 
 export function deleteNode(id: number) {
   return request<void>(`/nodes/${id}`, { method: 'DELETE' })
+}
+
+export function getNodeStatus(id: number) {
+  return request<NodeStatusResponse>(`/nodes/${id}/status`)
 }
 
 // Proxies

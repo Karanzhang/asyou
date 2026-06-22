@@ -22,6 +22,9 @@ type Node struct {
     BindPort        int       `db:"bind_port" json:"bind_port"`
     TlsEnabled      bool      `db:"tls_enabled" json:"tls_enabled"`
     AuthToken       string    `db:"auth_token" json:"-"`
+    DashboardPort   int       `db:"dashboard_port" json:"dashboard_port"`
+    DashboardUser   string    `db:"dashboard_user" json:"dashboard_user"`
+    DashboardPwd    string    `db:"dashboard_pwd" json:"-"`
     FrpVersion      string    `db:"frp_version" json:"frp_version"`
     Region          string    `db:"region" json:"region"`
     Country         string    `db:"country" json:"country"`

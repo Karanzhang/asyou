@@ -34,6 +34,9 @@ export default function ProxyDetail() {
     ? nodes.find(n => n.id === proxy.node_id)?.name || `Node #${proxy.node_id}`
     : '—'
 
+  const [copied, setCopied] = useState(false)
+  const FRP_VERSION = '0.69.1'
+
   // Auto-refresh on SSE proxy update for this proxy
   useSSE('proxy_update', (data: any) => {
     if (!id || !data) return
@@ -90,7 +93,6 @@ ${proxy.remote_port ? `remote_port = ${proxy.remote_port}` : ''}
 ${proxy.subdomain ? `subdomain = ${proxy.subdomain}` : ''}`
   const frpcCommand = `frpc -c ${sectionName}.ini`
 
-  const [copied, setCopied] = useState(false)
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(frpcINI)
@@ -103,8 +105,6 @@ ${proxy.subdomain ? `subdomain = ${proxy.subdomain}` : ''}`
     downloadFile(frpcINI, `${sectionName}.ini`, 'text/plain;charset=utf-8')
   }
 
-  const FRP_VERSION = '0.69.1'
-
   const handleDownloadScript = () => {
     const ua = navigator.userAgent
     const isWin = ua.includes('Windows')
@@ -116,34 +116,91 @@ ${proxy.subdomain ? `subdomain = ${proxy.subdomain}` : ''}`
     const url = `https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${pkg}`
 
     if (isWin) {
+      // Embed INI content as Base64 to avoid batch/ps special char issues
+      const iniBase64 = btoa(unescape(encodeURIComponent(frpcINI)))
+      const accessLine = proxy.remote_port
+        ? `echo  Access: http://${frpsHost}:${proxy.remote_port}`
+        : `echo  Remote port: (assigned by frps, check dashboard)`
       const script = `@echo off
-chcp 65001 >nul
-setlocal enabledelayedexpansion
+setlocal
 
-where frpc.exe >nul 2>&1
-if !ERRORLEVEL! EQU 0 (
-    echo [✓] frpc found
+REM ===== Step 1: Generate config file =====
+set CONFIG_FILE=%~dp0${sectionName}.ini
+powershell -Command "$b=[System.Convert]::FromBase64String('${iniBase64}');[System.Text.Encoding]::ASCII.GetString($b)|Out-File -FilePath '%CONFIG_FILE%' -Encoding ascii -Force"
+if not exist "%CONFIG_FILE%" (
+    echo [FAIL] Failed to create config file.
+    pause
+    exit /b 1
+)
+echo [OK] Config written to %CONFIG_FILE%
+
+REM ===== Step 2: Find or download frpc =====
+set FRPC_PATH=frpc.exe
+if exist "%~dp0frpc.exe" (
+    set FRPC_PATH=%~dp0frpc.exe
+    echo [OK] frpc.exe found locally
 ) else (
-    echo [~] frpc not found, downloading...
-    powershell -Command "& {Invoke-WebRequest -Uri '${url}' -OutFile '%TEMP%\\${pkg}'}"
-    if exist "%TEMP%\\frp_${FRP_VERSION}_windows_${arch}" rmdir /s /q "%TEMP%\\frp_${FRP_VERSION}_windows_${arch}"
-    powershell -Command "& {Expand-Archive -Path '%TEMP%\\${pkg}' -DestinationPath '%TEMP%' -Force}"
-    copy /y "%TEMP%\\frp_${FRP_VERSION}_windows_${arch}\\frpc.exe" "%~dp0frpc.exe" >nul
-    if exist "%TEMP%\\${pkg}" del "%TEMP%\\${pkg}"
-    if exist "%TEMP%\\frp_${FRP_VERSION}_windows_${arch}" rmdir /s /q "%TEMP%\\frp_${FRP_VERSION}_windows_${arch}"
-    echo [✓] frpc downloaded to %~dp0frpc.exe
+    where frpc.exe >nul 2>&1
+    if not errorlevel 1 (
+        echo [OK] frpc.exe found in PATH
+    ) else (
+        echo [..] frpc not found, downloading...
+        powershell -Command "$wc = New-Object System.Net.WebClient; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { $wc.DownloadFile('${url}', '%TEMP%\\${pkg}') } catch { Write-Error $_; exit 1 }"
+        if not exist "%TEMP%\\${pkg}" (
+            echo [FAIL] Download failed. Check your network connection.
+            pause
+            exit /b 1
+        )
+        echo [OK] Downloaded, extracting...
+        powershell -Command "Expand-Archive -Path '%TEMP%\\${pkg}' -DestinationPath '%TEMP%' -Force"
+        if exist "%TEMP%\\frp_${FRP_VERSION}_windows_${arch}\\frpc.exe" (
+            copy /y "%TEMP%\\frp_${FRP_VERSION}_windows_${arch}\\frpc.exe" "%~dp0frpc.exe" >nul
+            set FRPC_PATH=%~dp0frpc.exe
+            echo [OK] frpc.exe saved to %~dp0frpc.exe
+        ) else (
+            echo [FAIL] Extraction failed.
+            pause
+            exit /b 1
+        )
+    )
 )
 
 echo.
+echo ============================================
+echo  Tunnel: ${sectionName}
+echo  Local:  127.0.0.1:${proxy.local_port}
+${accessLine}
+echo ============================================
+echo.
 echo Starting frpc...
-frpc.exe -c "%~dp0${sectionName}.ini"
+"%FRPC_PATH%" -c "%CONFIG_FILE%"
+if errorlevel 1 (
+    echo.
+    echo [FAIL] frpc exited with error. Make sure ${sectionName}.ini is in the same folder as this script.
+    pause
+)
+
+echo.
+echo [OK] Tunnel is running. Press Ctrl+C to stop.
 pause`
       downloadFile(script, `run-${sectionName}.bat`, 'text/plain;charset=utf-8')
     } else {
+      const iniBase64 = btoa(unescape(encodeURIComponent(frpcINI)))
+      const unixAccessLine = proxy.remote_port
+        ? `echo "Access: http://${frpsHost}:${proxy.remote_port}"`
+        : `echo "Remote port: (assigned by frps, check dashboard)"`
       const script = `#!/bin/sh
 set -e
 
-FRPC_PATH="$(dirname "$0")/frpc"
+DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_FILE="$DIR/${sectionName}.ini"
+
+# ===== Step 1: Generate config file =====
+printf '%s' "${iniBase64}" | base64 -d > "$CONFIG_FILE" 2>/dev/null || printf '%s' "${iniBase64}" | python3 -c "import sys,base64; sys.stdout.buffer.write(base64.b64decode(sys.stdin.read()))" > "$CONFIG_FILE"
+echo "[OK] Config written to $CONFIG_FILE"
+
+# ===== Step 2: Find or download frpc =====
+FRPC_PATH="$DIR/frpc"
 
 if command -v frpc >/dev/null 2>&1; then
     FRPC_PATH="frpc"
@@ -153,18 +210,27 @@ elif [ -f "$FRPC_PATH" ]; then
 else
     echo "[~] frpc not found, downloading..."
     cd /tmp
-    curl -sL "${url}" -o "${pkg}" || wget -q "${url}" -O "${pkg}"
+    curl -sL "${url}" -o "${pkg}" 2>/dev/null || wget -q "${url}" -O "${pkg}" 2>/dev/null || {
+        echo "[FAIL] Download failed. Please install frpc manually."
+        exit 1
+    }
     tar xzf "${pkg}"
-    cp "frp_${FRP_VERSION}_${osArch}_${arch}/frpc" "$(dirname "$0")/frpc"
-    chmod +x "$(dirname "$0")/frpc"
+    cp "frp_${FRP_VERSION}_${osArch}_${arch}/frpc" "$DIR/frpc"
+    chmod +x "$DIR/frpc"
     rm -rf "frp_${FRP_VERSION}_${osArch}_${arch}" "${pkg}"
-    FRPC_PATH="$(dirname "$0")/frpc"
+    FRPC_PATH="$DIR/frpc"
     echo "[✓] frpc downloaded"
 fi
 
 echo ""
+echo "============================================"
+echo " Tunnel: ${sectionName}"
+echo " Local:  127.0.0.1:${proxy.local_port}"
+${unixAccessLine}
+echo "============================================"
+echo ""
 echo "Starting frpc..."
-exec "$FRPC_PATH" -c "$(dirname "$0")/${sectionName}.ini"`
+exec "$FRPC_PATH" -c "$CONFIG_FILE"`
       downloadFile(script, `run-${sectionName}.sh`, 'text/plain;charset=utf-8')
     }
   }

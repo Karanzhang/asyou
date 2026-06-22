@@ -79,3 +79,31 @@ export interface ApiKey {
   revoked: boolean
   created_at: string
 }
+
+export interface FrpsServerInfo {
+  version: string
+  total_conns: number
+  current_conns: number
+  total_traffic_in: number
+  total_traffic_out: number
+  uptime: string
+}
+
+export interface FrpsProxyEntry {
+  name: string
+  type: string
+  status: string
+  local_addr: string
+  remote_addr: string
+  bytes_in: number
+  bytes_out: number
+  conn_count: number
+  last_err: string
+}
+
+export interface NodeStatusResponse {
+  node_id: number
+  node_name: string
+  server_info: FrpsServerInfo
+  proxies: FrpsProxyEntry[]
+}

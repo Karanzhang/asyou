@@ -1,9 +1,12 @@
-import { useEffect, useState, useCallback } from 'react'
-import { listNodes, createNode, deleteNode } from '../api/client'
-import type { Node as AsyouNode } from '../types'
+import React, { useEffect, useState, useCallback } from 'react'
+import { listNodes, createNode, deleteNode, getNodeStatus } from '../api/client'
+import type { Node as AsyouNode, NodeStatusResponse } from '../types'
 
 export default function NodeList() {
   const [nodes, setNodes] = useState<AsyouNode[]>([])
+  const [statuses, setStatuses] = useState<Record<number, NodeStatusResponse>>({})
+  const [loadingStatus, setLoadingStatus] = useState<Record<number, boolean>>({})
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [showCreate, setShowCreate] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null)
 
@@ -18,6 +21,25 @@ export default function NodeList() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const toggleStatus = async (nodeId: number) => {
+    if (expanded[nodeId]) {
+      setExpanded(prev => ({ ...prev, [nodeId]: false }))
+      return
+    }
+    setExpanded(prev => ({ ...prev, [nodeId]: true }))
+    if (!statuses[nodeId]) {
+      setLoadingStatus(prev => ({ ...prev, [nodeId]: true }))
+      try {
+        const data = await getNodeStatus(nodeId)
+        setStatuses(prev => ({ ...prev, [nodeId]: data }))
+      } catch {
+        showToast('Failed to load frps status', 'error')
+      } finally {
+        setLoadingStatus(prev => ({ ...prev, [nodeId]: false }))
+      }
+    }
+  }
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this node?')) return
@@ -69,56 +91,131 @@ export default function NodeList() {
           <table>
             <thead>
               <tr>
+                <th></th>
                 <th>Status</th>
                 <th>Name</th>
                 <th>Host:Port</th>
                 <th>Region</th>
                 <th>Weight</th>
-                <th>Max Conns</th>
-                <th>frp Ver</th>
+                <th>Live Conns</th>
+                <th>Traffic</th>
                 <th>Heartbeat</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {nodes.length === 0 && <tr><td colSpan={9} className="empty">No nodes registered.</td></tr>}
-              {nodes.map(n => (
-                <tr key={n.id}>
-                  <td>
-                    <span className={`badge badge-${isOnline(n) ? 'running' : 'stopped'}`}>
-                      {isOnline(n) ? 'online' : 'offline'}
-                    </span>
-                  </td>
-                  <td>
-                    <strong>{n.name}</strong>
-                    {n.score !== undefined && n.score > 0 && (
-                      <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        score: {n.score.toFixed(1)}
-                      </span>
+              {nodes.length === 0 && <tr><td colSpan={10} className="empty">No nodes registered.</td></tr>}
+              {nodes.map(n => {
+                const st = statuses[n.id]
+                const si = st?.server_info
+                const isExpanded = expanded[n.id]
+                const isLoading = loadingStatus[n.id]
+
+                return (
+                  <React.Fragment key={n.id}>
+                    <tr>
+                      <td>
+                        <button className="btn btn-outline btn-sm" onClick={() => toggleStatus(n.id)} style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem' }}>
+                          {isExpanded ? '▼' : '▶'}
+                        </button>
+                      </td>
+                      <td>
+                        <span className={`badge badge-${isOnline(n) ? 'running' : 'stopped'}`}>
+                          {isOnline(n) ? 'online' : 'offline'}
+                        </span>
+                      </td>
+                      <td>
+                        <strong>{n.name}</strong>
+                        {si && <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>v{si.version}</span>}
+                        {n.score !== undefined && n.score > 0 && (
+                          <span style={{ marginLeft: '0.3rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            score:{n.score.toFixed(1)}
+                          </span>
+                        )}
+                      </td>
+                      <td>{n.host}:{n.bind_port}</td>
+                      <td>
+                        {n.region ? (
+                          <span title={`${n.country || ''} ${n.city || ''}`}>
+                            {n.region}{n.country ? ` (${n.country})` : ''}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td>{n.weight ?? '1.0'}</td>
+                      <td style={{ fontWeight: 600 }}>
+                        {isLoading ? '…' : si ? `${si.current_conns} / ${si.total_conns}` : '—'}
+                      </td>
+                      <td style={{ fontSize: '0.8rem' }}>
+                        {isLoading ? '…' : si ? formatBytes(si.total_traffic_in + si.total_traffic_out) : '—'}
+                      </td>
+                      <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        {n.last_heartbeat
+                          ? new Date(n.last_heartbeat).toLocaleString()
+                          : '—'}
+                      </td>
+                      <td>
+                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(n.id)}>Delete</button>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr key={`n-${n.id}-detail`}>
+                        <td colSpan={10} style={{ padding: 0, background: 'var(--bg)' }}>
+                          <div style={{ padding: '0.8rem 1.5rem' }}>
+                            {isLoading ? (
+                              <p style={{ color: 'var(--text-muted)' }}>Loading frps status…</p>
+                            ) : si ? (
+                              <div>
+                                <div style={{ display: 'flex', gap: '2rem', marginBottom: '0.8rem', fontSize: '0.85rem' }}>
+                                  <span>frps v{si.version}</span>
+                                  <span>Uptime: {si.uptime}</span>
+                                  <span>Total conns: {si.total_conns}</span>
+                                  <span>Current: {si.current_conns}</span>
+                                  <span>↓ {formatBytes(si.total_traffic_in)}</span>
+                                  <span>↑ {formatBytes(si.total_traffic_out)}</span>
+                                </div>
+                                {st?.proxies && st.proxies.length > 0 && (
+                                  <>
+                                    <p style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem' }}>Active Proxies on frps:</p>
+                                    <table style={{ fontSize: '0.8rem', width: '100%' }}>
+                                      <thead>
+                                        <tr style={{ color: 'var(--text-muted)' }}>
+                                          <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Name</th>
+                                          <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Status</th>
+                                          <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Local</th>
+                                          <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Remote</th>
+                                          <th style={{ textAlign: 'right', padding: '0.2rem 0.5rem' }}>Conns</th>
+                                          <th style={{ textAlign: 'right', padding: '0.2rem 0.5rem' }}>Traffic</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {st.proxies.map(p => (
+                                          <tr key={p.name}>
+                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.name}</td>
+                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.status}</td>
+                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.local_addr}</td>
+                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.remote_addr || '—'}</td>
+                                            <td style={{ padding: '0.2rem 0.5rem', textAlign: 'right' }}>{p.conn_count}</td>
+                                            <td style={{ padding: '0.2rem 0.5rem', textAlign: 'right' }}>{formatBytes(p.bytes_in + p.bytes_out)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </>
+                                )}
+                                {(!st?.proxies || st.proxies.length === 0) && (
+                                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No active proxies on this frps node.</p>
+                                )}
+                              </div>
+                            ) : (
+                              <p style={{ color: 'var(--text-muted)' }}>Failed to reach frps admin API. Check dashboard credentials.</p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td>{n.host}:{n.bind_port}</td>
-                  <td>
-                    {n.region ? (
-                      <span title={`${n.country || ''} ${n.city || ''}`}>
-                        {n.region}
-                        {n.country ? ` (${n.country})` : ''}
-                      </span>
-                    ) : '—'}
-                  </td>
-                  <td>{n.weight ?? '1.0'}</td>
-                  <td>{n.max_connections ?? '—'}</td>
-                  <td>{n.frp_version || '—'}</td>
-                  <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                    {n.last_heartbeat
-                      ? new Date(n.last_heartbeat).toLocaleString()
-                      : '—'}
-                  </td>
-                  <td>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(n.id)}>Delete</button>
-                  </td>
-                </tr>
-              ))}
+                  </React.Fragment>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -127,12 +224,23 @@ export default function NodeList() {
   )
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
 function CreateNodeForm({ onDone, onToast }: { onDone: () => void; onToast: (m: string, t?: string) => void }) {
   const [name, setName] = useState('')
   const [host, setHost] = useState('')
   const [bindPort, setBindPort] = useState('7000')
   const [apiPort, setApiPort] = useState('')
   const [authToken, setAuthToken] = useState('')
+  const [dashboardPort, setDashboardPort] = useState('7500')
+  const [dashboardUser, setDashboardUser] = useState('admin')
+  const [dashboardPwd, setDashboardPwd] = useState('')
   const [region, setRegion] = useState('')
   const [country, setCountry] = useState('')
   const [city, setCity] = useState('')
@@ -152,6 +260,9 @@ function CreateNodeForm({ onDone, onToast }: { onDone: () => void; onToast: (m: 
         auth_token: authToken || undefined,
       }
       if (apiPort) body.api_port = parseInt(apiPort)
+      if (dashboardPort) body.dashboard_port = parseInt(dashboardPort)
+      if (dashboardUser) body.dashboard_user = dashboardUser
+      if (dashboardPwd) body.dashboard_pwd = dashboardPwd
       if (region) body.region = region
       if (country) body.country = country
       if (city) body.city = city
@@ -195,6 +306,18 @@ function CreateNodeForm({ onDone, onToast }: { onDone: () => void; onToast: (m: 
             <div className="form-group">
               <label>Auth Token</label>
               <input value={authToken} onChange={e => setAuthToken(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Dashboard Port</label>
+              <input type="number" value={dashboardPort} onChange={e => setDashboardPort(e.target.value)} placeholder="7500" />
+            </div>
+            <div className="form-group">
+              <label>Dashboard User</label>
+              <input value={dashboardUser} onChange={e => setDashboardUser(e.target.value)} placeholder="admin" />
+            </div>
+            <div className="form-group">
+              <label>Dashboard Password</label>
+              <input type="password" value={dashboardPwd} onChange={e => setDashboardPwd(e.target.value)} placeholder="frps dashboard password" />
             </div>
           </div>
         </fieldset>

@@ -10,6 +10,7 @@ import (
     "strings"
     "time"
 
+    "github.com/asyou/core/frps"
     "github.com/asyou/server/internal/model"
 )
 
@@ -20,6 +21,9 @@ type nodeCreateRequest struct {
     BindPort       *int    `json:"bind_port,omitempty"`
     TlsEnabled     *bool   `json:"tls_enabled,omitempty"`
     AuthToken      *string `json:"auth_token,omitempty"`
+    DashboardPort  *int    `json:"dashboard_port,omitempty"`
+    DashboardUser  *string `json:"dashboard_user,omitempty"`
+    DashboardPwd   *string `json:"dashboard_pwd,omitempty"`
     Region         *string `json:"region,omitempty"`
     Country        *string `json:"country,omitempty"`
     City           *string `json:"city,omitempty"`
@@ -33,7 +37,7 @@ type nodeCreateRequest struct {
 func (s *Server) NodesListCreateHandler(w http.ResponseWriter, r *http.Request) {
     switch r.Method {
     case http.MethodGet:
-        rows, err := s.DB.Query(`SELECT id, name, host, api_port, bind_port, tls_enabled, frp_version, region, country, city, latitude, longitude, max_connections, weight, is_active, last_heartbeat, created_at, updated_at FROM nodes`)
+        rows, err := s.DB.Query(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, frp_version, region, country, city, latitude, longitude, max_connections, weight, is_active, last_heartbeat, created_at, updated_at FROM nodes`)
         if err != nil {
             writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
             return
@@ -42,10 +46,10 @@ func (s *Server) NodesListCreateHandler(w http.ResponseWriter, r *http.Request) 
         list := make([]model.Node, 0)
         for rows.Next() {
             var n model.Node
-            var apiPort, bindPort, tlsEnabled, maxConn, isActive sql.NullInt64
-            var region, country, city, frpVer, lastHeartbeat, createdAt, updatedAt sql.NullString
+            var apiPort, bindPort, tlsEnabled, maxConn, isActive, dashPort sql.NullInt64
+            var region, country, city, frpVer, lastHeartbeat, createdAt, updatedAt, dashUser sql.NullString
             var lat, lng, weight sql.NullFloat64
-            if err := rows.Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &isActive, &lastHeartbeat, &createdAt, &updatedAt); err != nil {
+            if err := rows.Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &isActive, &lastHeartbeat, &createdAt, &updatedAt); err != nil {
                 writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
                 return
             }
@@ -154,8 +158,20 @@ func (s *Server) NodesListCreateHandler(w http.ResponseWriter, r *http.Request) 
         if req.Weight != nil {
             weight = *req.Weight
         }
-        _, err := s.DB.Exec(`INSERT INTO nodes (name, host, api_port, bind_port, tls_enabled, auth_token, region, country, city, latitude, longitude, max_connections, weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            req.Name, req.Host, ap, bp, tls, req.AuthToken, geoRegion, geoCountry, geoCity, lat, lng, maxCon, weight)
+        dp := sql.NullInt64{}
+        if req.DashboardPort != nil {
+            dp = sql.NullInt64{Int64: int64(*req.DashboardPort), Valid: true}
+        }
+        du := sql.NullString{}
+        if req.DashboardUser != nil {
+            du = sql.NullString{String: *req.DashboardUser, Valid: true}
+        }
+        dpwd := sql.NullString{}
+        if req.DashboardPwd != nil {
+            dpwd = sql.NullString{String: *req.DashboardPwd, Valid: true}
+        }
+        _, err := s.DB.Exec(`INSERT INTO nodes (name, host, api_port, bind_port, tls_enabled, auth_token, dashboard_port, dashboard_user, dashboard_pwd, region, country, city, latitude, longitude, max_connections, weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            req.Name, req.Host, ap, bp, tls, req.AuthToken, dp, du, dpwd, geoRegion, geoCountry, geoCity, lat, lng, maxCon, weight)
         if err != nil {
             writeJSONError(w, "cannot create node", "INTERNAL", http.StatusInternalServerError)
             return
@@ -192,6 +208,12 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
         s.NodeHeartbeatHandler(w, r, idStr)
         return
     }
+    if strings.HasSuffix(idStr, "/status") {
+        idStr = strings.TrimSuffix(idStr, "/status")
+        idStr = strings.TrimSuffix(idStr, "/")
+        s.NodeStatusHandler(w, r, idStr)
+        return
+    }
     if idStr == "best" || strings.HasSuffix(idStr, "/best") {
         s.NodeBestHandler(w, r)
         return
@@ -213,13 +235,12 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
         var apiPort sql.NullInt64
         var bindPort sql.NullInt64
         var tlsEnabled sql.NullInt64
-        var lastHeartbeat sql.NullString
-        var region, country, city, frpVer sql.NullString
+        var region, country, city, frpVer, dashUser sql.NullString
         var lat, lng, weight sql.NullFloat64
-        var maxConn sql.NullInt64
-        var isActive sql.NullInt64
-        err := s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, frp_version, region, country, city, latitude, longitude, max_connections, weight, is_active, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
-            Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &isActive, &lastHeartbeat, &n.CreatedAt, &n.UpdatedAt)
+        var maxConn, isActive, dashPort sql.NullInt64
+        var lastHeartbeat sql.NullString
+        err := s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, frp_version, region, country, city, latitude, longitude, max_connections, weight, is_active, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
+            Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &isActive, &lastHeartbeat, &n.CreatedAt, &n.UpdatedAt)
         if err == sql.ErrNoRows {
             writeJSONError(w, "not found", "NOT_FOUND", http.StatusNotFound)
             return
@@ -238,6 +259,12 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
         }
         if frpVer.Valid {
             n.FrpVersion = frpVer.String
+        }
+        if dashPort.Valid {
+            n.DashboardPort = int(dashPort.Int64)
+        }
+        if dashUser.Valid {
+            n.DashboardUser = dashUser.String
         }
         if region.Valid { n.Region = region.String }
         if country.Valid { n.Country = country.String }
@@ -350,6 +377,68 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
     default:
         writeJSONError(w, "method not allowed", "METHOD_NOT_ALLOWED", http.StatusMethodNotAllowed)
     }
+}
+
+// NodeStatusHandler returns live status from frps admin API for a node.
+func (s *Server) NodeStatusHandler(w http.ResponseWriter, r *http.Request, idStr string) {
+    id, err := strconv.ParseInt(strings.Trim(idStr, "/"), 10, 64)
+    if err != nil {
+        writeJSONError(w, "invalid id", "BAD_REQUEST", http.StatusBadRequest)
+        return
+    }
+
+    // Load node
+    var n model.Node
+    var dashPort, tlsEnabled, maxConn, isActive sql.NullInt64
+    var dashUser, dashPwd, frpVer, lastHb, region, country, city sql.NullString
+    var lat, lng, weight sql.NullFloat64
+    var createdAt, updatedAt sql.NullString
+    err = s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, dashboard_pwd, frp_version, region, country, city, latitude, longitude, max_connections, weight, is_active, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
+        Scan(&n.ID, &n.Name, &n.Host, &n.ApiPort, &n.BindPort, &tlsEnabled, &dashPort, &dashUser, &dashPwd, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &isActive, &lastHb, &createdAt, &updatedAt)
+    if err == sql.ErrNoRows {
+        writeJSONError(w, "not found", "NOT_FOUND", http.StatusNotFound)
+        return
+    } else if err != nil {
+        writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
+        return
+    }
+
+    // Build admin client and query frps
+    apiPort := 7500
+    if dashPort.Valid {
+        apiPort = int(dashPort.Int64)
+    } else if n.ApiPort > 0 {
+        apiPort = n.ApiPort
+    }
+    user := "admin"
+    if dashUser.Valid && dashUser.String != "" {
+        user = dashUser.String
+    }
+    pwd := ""
+    if dashPwd.Valid {
+        pwd = dashPwd.String
+    }
+
+    client := frps.NewAdminClientWithAuth(n.Host, apiPort, user, pwd)
+
+    serverInfo, err := client.GetServerInfo()
+    if err != nil {
+        writeJSONError(w, "cannot reach frps admin: "+err.Error(), "UNAVAILABLE", http.StatusServiceUnavailable)
+        return
+    }
+
+    proxies, err := client.ListAllProxies()
+    if err != nil {
+        proxies = nil // non-fatal
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "server_info": serverInfo,
+        "proxies":     proxies,
+        "node_id":     n.ID,
+        "node_name":   n.Name,
+    })
 }
 
 // NodeHeartbeatHandler updates last_heartbeat and records node health metrics.

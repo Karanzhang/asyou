@@ -75,6 +75,7 @@ export default function ProxyList() {
           nodes={nodes}
           onDone={() => { setShowCreate(false); load() }}
           onToast={showToast}
+          navigate={navigate}
         />
       )}
 
@@ -128,7 +129,7 @@ export default function ProxyList() {
   )
 }
 
-function CreateProxyForm({ nodes, onDone, onToast }: { nodes: AsyouNode[]; onDone: () => void; onToast: (m: string, t?: string) => void }) {
+function CreateProxyForm({ nodes, onDone, onToast, navigate }: { nodes: AsyouNode[]; onDone: () => void; onToast: (m: string, t?: string) => void; navigate: (path: string) => void }) {
   const [name, setName] = useState('')
   const [type, setType] = useState('tcp')
   const [localPort, setLocalPort] = useState('')
@@ -141,7 +142,7 @@ function CreateProxyForm({ nodes, onDone, onToast }: { nodes: AsyouNode[]; onDon
     e.preventDefault()
     setBusy(true)
     try {
-      await createProxy({
+      const result = await createProxy({
         name,
         type,
         local_port: parseInt(localPort),
@@ -151,6 +152,8 @@ function CreateProxyForm({ nodes, onDone, onToast }: { nodes: AsyouNode[]; onDon
       })
       onToast('Tunnel created')
       onDone()
+      // Navigate to detail page to show frpc config
+      navigate(`/proxies/${result.id}`)
     } catch (err: any) {
       onToast(err.message, 'error')
     } finally {
@@ -181,8 +184,11 @@ function CreateProxyForm({ nodes, onDone, onToast }: { nodes: AsyouNode[]; onDon
             <input type="number" value={localPort} onChange={e => setLocalPort(e.target.value)} required />
           </div>
           <div className="form-group">
-            <label>Remote Port (optional)</label>
-            <input type="number" value={remotePort} onChange={e => setRemotePort(e.target.value)} />
+            <label>Remote Port</label>
+            <input type="number" value={remotePort} onChange={e => setRemotePort(e.target.value)} placeholder="auto-assigned" />
+            <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>
+              Leave empty for auto-assignment from node's port range
+            </small>
           </div>
           <div className="form-group">
             <label>Subdomain (optional)</label>
@@ -190,10 +196,16 @@ function CreateProxyForm({ nodes, onDone, onToast }: { nodes: AsyouNode[]; onDon
           </div>
           <div className="form-group">
             <label>Node</label>
-            <select value={nodeId} onChange={e => setNodeId(e.target.value)}>
-              <option value="">— Select —</option>
-              {nodes.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-            </select>
+            {nodes.length === 1 ? (
+              <div style={{ padding: '0.5rem 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                {nodes[0].name} <span style={{ fontSize: '0.8rem' }}>(auto-selected — only node)</span>
+              </div>
+            ) : (
+              <select value={nodeId} onChange={e => setNodeId(e.target.value)}>
+                <option value="">— Auto —</option>
+                {nodes.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
+              </select>
+            )}
           </div>
         </div>
         <div style={{ marginTop: '1rem' }}>

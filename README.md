@@ -1,4 +1,4 @@
-# asyou — Developer Tunnel Platform
+# asyou — Builder Youself Tunnel Platform
 
 [![Go](https://img.shields.io/badge/Go-1.20+-00ADD8?logo=go)](https://go.dev)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)](https://react.dev)
@@ -103,7 +103,7 @@ asyou/
 │   ├── cmd/          # Entry point
 │   ├── internal/     # Handlers, middleware, models, frp manager
 │   └── migrations/   # SQLite schema
-├── web/              # React Dashboard (Vite + TypeScript)
+├── web/              # React Dashboard (Vite + TypeScript) — see web/README.md
 │   └── src/
 │       ├── api/      # REST client
 │       ├── components/ # UI pages & charts
