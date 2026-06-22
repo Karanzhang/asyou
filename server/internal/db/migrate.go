@@ -5,7 +5,6 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -42,7 +41,7 @@ func RunMigrations(db *sql.DB, _ string) error {
 			continue
 		}
 
-		b, err := migrationFS.ReadFile(filepath.Join("migrations", name))
+		b, err := migrationFS.ReadFile(name)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", name, err)
 		}
