@@ -10,6 +10,7 @@ export default function ProxyDetail() {
   const navigate = useNavigate()
   const [proxy, setProxy] = useState<AsyouProxy | null>(null)
   const [nodes, setNodes] = useState<AsyouNode[]>([])
+  const [frpsClientId, setFrpsClientId] = useState('')
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null)
 
   const showToast = (msg: string, type = 'success') => {
@@ -23,8 +24,9 @@ export default function ProxyDetail() {
       getProxy(parseInt(id)),
       listNodes(),
     ])
-      .then(([p, n]) => {
-        setProxy(p)
+      .then(([res, n]) => {
+        setProxy(res.proxy)
+        setFrpsClientId(res.frps_client_id || '')
         setNodes(n)
       })
       .catch(() => showToast('Failed to load', 'error'))
@@ -41,7 +43,10 @@ export default function ProxyDetail() {
   useSSE('proxy_update', (data: any) => {
     if (!id || !data) return
     if (data.id === parseInt(id)) {
-      getProxy(parseInt(id)).then(setProxy).catch(() => {})
+      getProxy(parseInt(id)).then(res => {
+        setProxy(res.proxy)
+        if (res.frps_client_id) setFrpsClientId(res.frps_client_id)
+      }).catch(() => {})
     }
   })
 
@@ -51,8 +56,9 @@ export default function ProxyDetail() {
     try {
       await proxyAction(proxy.id, action)
       showToast(`Proxy ${action}ed`)
-      const updated = await getProxy(proxy.id)
-      setProxy(updated)
+      const res = await getProxy(proxy.id)
+      setProxy(res.proxy)
+      if (res.frps_client_id) setFrpsClientId(res.frps_client_id)
     } catch (err: any) {
       showToast(err.message, 'error')
     }
@@ -265,6 +271,7 @@ exec "$FRPC_PATH" -c "$CONFIG_FILE"`
           <div className="detail-item"><div className="label">Remote Port</div><div className="val">{proxy.remote_port ?? '—'}</div></div>
           <div className="detail-item"><div className="label">Node</div><div className="val">{nodeName}</div></div>
           <div className="detail-item"><div className="label">Subdomain</div><div className="val">{proxy.subdomain ?? '—'}</div></div>
+          {frpsClientId && <div className="detail-item"><div className="label">frps Client ID</div><div className="val" style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{frpsClientId}</div></div>}
         </div>
       </div>
 

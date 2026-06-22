@@ -88,7 +88,7 @@ export function listProxies() {
 }
 
 export function getProxy(id: number) {
-  return request<Proxy>(`/proxies/${id}`)
+  return request<{ proxy: Proxy; frps_client_id?: string }>(`/proxies/${id}`)
 }
 
 export function createProxy(data: {

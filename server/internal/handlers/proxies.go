@@ -291,15 +291,28 @@ func (s *Server) ProxyItemHandler(w http.ResponseWriter, r *http.Request) {
         }
 
         // Live status check: if DB says stopped but proxy has a node, check frps
-        if p.Status == "stopped" && p.NodeID != nil {
+        frpsClientID := ""
+        if p.NodeID != nil {
             liveStatus := s.checkProxyLiveStatus(*p.NodeID, p.Name)
             if liveStatus != "" {
                 p.Status = liveStatus
             }
+            // Also fetch clientID from frps
+            if proxies, err := s.fetchNodeProxies(*p.NodeID); err == nil {
+                for _, fp := range proxies {
+                    if fp.Name == p.Name {
+                        frpsClientID = fp.ClientID
+                        break
+                    }
+                }
+            }
         }
 
         w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(p)
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "proxy":          p,
+            "frps_client_id": frpsClientID,
+        })
     case http.MethodPut:
         var upd struct {
             LocalPort    *int     `json:"local_port,omitempty"`
