@@ -109,6 +109,10 @@ func (s *Server) NodesListCreateHandler(w http.ResponseWriter, r *http.Request) 
         w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(list)
     case http.MethodPost:
+        if !s.isAdmin(r) {
+            writeJSONError(w, "admin access required", "FORBIDDEN", http.StatusForbidden)
+            return
+        }
         var req nodeCreateRequest
         if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
             writeJSONError(w, "bad request", "BAD_REQUEST", http.StatusBadRequest)
@@ -282,6 +286,10 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(n)
     case http.MethodPut:
+        if !s.isAdmin(r) {
+            writeJSONError(w, "admin access required", "FORBIDDEN", http.StatusForbidden)
+            return
+        }
         var upd struct {
             Name           *string `json:"name,omitempty"`
             Host           *string `json:"host,omitempty"`
@@ -377,6 +385,10 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(n)
     case http.MethodDelete:
+        if !s.isAdmin(r) {
+            writeJSONError(w, "admin access required", "FORBIDDEN", http.StatusForbidden)
+            return
+        }
         _, err := s.DB.Exec(`DELETE FROM nodes WHERE id = ?`, id)
         if err != nil {
             writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
