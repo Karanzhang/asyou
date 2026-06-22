@@ -9,6 +9,7 @@ import (
     "strings"
     "time"
 
+    "github.com/asyou/core/frps"
     "github.com/asyou/server/internal/model"
 )
 
@@ -250,6 +251,15 @@ func (s *Server) ProxyItemHandler(w http.ResponseWriter, r *http.Request) {
                 p.UpdatedAt = t
             }
         }
+
+        // Live status check: if DB says stopped but proxy has a node, check frps
+        if p.Status == "stopped" && p.NodeID != nil {
+            liveStatus := s.checkProxyLiveStatus(*p.NodeID, p.Name)
+            if liveStatus != "" {
+                p.Status = liveStatus
+            }
+        }
+
         w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(p)
     case http.MethodPut:
@@ -578,6 +588,43 @@ func (s *Server) loadNode(nodeID *int64) (*model.Node, error) {
         }
     }
     return &n, nil
+}
+
+// checkProxyLiveStatus queries frps admin API to check if a proxy is actually running.
+func (s *Server) checkProxyLiveStatus(nodeID int64, proxyName string) string {
+    var dashPort, bindPort sql.NullInt64
+    var host, dashUser, dashPwd sql.NullString
+    err := s.DB.QueryRow(`SELECT host, bind_port, dashboard_port, dashboard_user, dashboard_pwd FROM nodes WHERE id = ?`, nodeID).
+        Scan(&host, &bindPort, &dashPort, &dashUser, &dashPwd)
+    if err != nil {
+        return ""
+    }
+    if !host.Valid || host.String == "" {
+        return ""
+    }
+    apiPort := 7500
+    if dashPort.Valid {
+        apiPort = int(dashPort.Int64)
+    }
+    user := "admin"
+    if dashUser.Valid && dashUser.String != "" {
+        user = dashUser.String
+    }
+    pwd := ""
+    if dashPwd.Valid {
+        pwd = dashPwd.String
+    }
+    client := frps.NewAdminClientWithAuth(host.String, apiPort, user, pwd)
+    list, err := client.ListAllProxies()
+    if err != nil {
+        return ""
+    }
+    for _, p := range list {
+        if p.Name == proxyName && p.Status == "online" {
+            return "running (local)"
+        }
+    }
+    return ""
 }
 
 // ProxyStatsHandler handles POST/GET /proxies/{id}/stats
