@@ -5,9 +5,8 @@ import type { Node as AsyouNode, NodeStatusResponse } from '../types'
 export default function NodeList() {
   const [nodes, setNodes] = useState<AsyouNode[]>([])
   const [statuses, setStatuses] = useState<Record<number, NodeStatusResponse>>({})
-  const [loadingStatus, setLoadingStatus] = useState<Record<number, boolean>>({})
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [showCreate, setShowCreate] = useState(false)
+  const [detailNodeId, setDetailNodeId] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null)
 
   const showToast = (msg: string, type = 'success') => {
@@ -30,26 +29,18 @@ export default function NodeList() {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t) }, [load])
 
-  const toggleStatus = async (nodeId: number) => {
-    if (expanded[nodeId]) {
-      setExpanded(prev => ({ ...prev, [nodeId]: false }))
-      return
-    }
-    setExpanded(prev => ({ ...prev, [nodeId]: true }))
-    if (!statuses[nodeId]) {
-      setLoadingStatus(prev => ({ ...prev, [nodeId]: true }))
-      try {
-        const data = await getNodeStatus(nodeId)
-        setStatuses(prev => ({ ...prev, [nodeId]: data }))
-      } catch {
-        showToast('Failed to load frps status', 'error')
-      } finally {
-        setLoadingStatus(prev => ({ ...prev, [nodeId]: false }))
-      }
-    }
-  }
+  // Aggregate stats across all nodes
+  const agg = { clients: 0, curConns: 0, trafficIn: 0, trafficOut: 0, proxies: 0 }
+  Object.values(statuses).forEach(st => {
+    if (!st?.server_info) return
+    agg.clients += st.server_info.clientCounts || 0
+    agg.curConns += st.server_info.curConns || 0
+    agg.trafficIn += st.server_info.totalTrafficIn || 0
+    agg.trafficOut += st.server_info.totalTrafficOut || 0
+    if (st.proxies) agg.proxies += st.proxies.length
+  })
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this node?')) return
@@ -86,10 +77,10 @@ export default function NodeList() {
         <CreateNodeForm onDone={() => { setShowCreate(false); load() }} onToast={showToast} />
       )}
 
-      {/* Stats summary */}
+      {/* Aggregated frps dashboard stats */}
       <div className="stats-grid" style={{ marginBottom: '1rem' }}>
         <div className="stat-card">
-          <div className="label">Total Nodes</div>
+          <div className="label">frps Nodes</div>
           <div className="value">{nodes.length}</div>
         </div>
         <div className="stat-card">
@@ -97,8 +88,24 @@ export default function NodeList() {
           <div className="value" style={{ color: 'var(--success)' }}>{nodes.filter(isOnline).length}</div>
         </div>
         <div className="stat-card">
-          <div className="label">Offline</div>
-          <div className="value" style={{ color: 'var(--danger)' }}>{nodes.filter(n => !isOnline(n)).length}</div>
+          <div className="label">Active Clients</div>
+          <div className="value">{agg.clients}</div>
+        </div>
+        <div className="stat-card">
+          <div className="label">Active Proxies</div>
+          <div className="value">{agg.proxies}</div>
+        </div>
+        <div className="stat-card">
+          <div className="label">Current Conns</div>
+          <div className="value">{agg.curConns}</div>
+        </div>
+        <div className="stat-card">
+          <div className="label">Traffic In</div>
+          <div className="value" style={{ fontSize: '0.9rem' }}>{formatBytes(agg.trafficIn)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="label">Traffic Out</div>
+          <div className="value" style={{ fontSize: '0.9rem' }}>{formatBytes(agg.trafficOut)}</div>
         </div>
       </div>
 
@@ -107,34 +114,26 @@ export default function NodeList() {
           <table>
             <thead>
               <tr>
-                <th></th>
                 <th>Status</th>
                 <th>Name</th>
                 <th>Host:Port</th>
-                <th>Region</th>
-                <th>Weight</th>
-                <th>Live Conns</th>
-                <th>Traffic</th>
+                <th>Clients</th>
+                <th>Proxies</th>
+                <th>Conns</th>
+                <th>Traffic In/Out</th>
                 <th>Heartbeat</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {nodes.length === 0 && <tr><td colSpan={10} className="empty">No nodes registered.</td></tr>}
+              {nodes.length === 0 && <tr><td colSpan={9} className="empty">No nodes registered.</td></tr>}
               {nodes.map(n => {
                 const st = statuses[n.id]
                 const si = st?.server_info
-                const isExpanded = expanded[n.id]
-                const isLoading = loadingStatus[n.id]
-
+                const isDetail = detailNodeId === n.id
                 return (
                   <React.Fragment key={n.id}>
-                    <tr>
-                      <td>
-                        <button className="btn btn-outline btn-sm" onClick={() => toggleStatus(n.id)} style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem' }}>
-                          {isExpanded ? '▼' : '▶'}
-                        </button>
-                      </td>
+                    <tr onClick={() => setDetailNodeId(isDetail ? null : n.id)} style={{ cursor: 'pointer' }}>
                       <td>
                         <span className={`badge badge-${isOnline(n) ? 'running' : 'stopped'}`}>
                           {isOnline(n) ? 'online' : 'offline'}
@@ -143,87 +142,61 @@ export default function NodeList() {
                       <td>
                         <strong>{n.name}</strong>
                         {si && <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>v{si.version}</span>}
-                        {n.score !== undefined && n.score > 0 && (
-                          <span style={{ marginLeft: '0.3rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            score:{n.score.toFixed(1)}
-                          </span>
-                        )}
                       </td>
                       <td>{n.host}:{n.bind_port}</td>
-                      <td>
-                        {n.region ? (
-                          <span title={`${n.country || ''} ${n.city || ''}`}>
-                            {n.region}{n.country ? ` (${n.country})` : ''}
-                          </span>
-                        ) : '—'}
-                      </td>
-                      <td>{n.weight ?? '1.0'}</td>
-                      <td style={{ fontWeight: 600 }}>
-                        {isLoading ? '…' : si ? `${si.curConns} / ${si.clientCounts}` : '—'}
-                      </td>
-                      <td style={{ fontSize: '0.8rem' }}>
-                        {isLoading ? '…' : si ? formatBytes(si.totalTrafficIn + si.totalTrafficOut) : '—'}
+                      <td style={{ fontWeight: 600, textAlign: 'center' }}>{si?.clientCounts ?? '…'}</td>
+                      <td style={{ textAlign: 'center' }}>{st?.proxies?.length ?? '…'}</td>
+                      <td style={{ textAlign: 'center' }}>{si?.curConns ?? '…'}</td>
+                      <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                        {si ? `${formatBytes(si.totalTrafficIn)} ↓ / ${formatBytes(si.totalTrafficOut)} ↑` : '…'}
                       </td>
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                        {n.last_heartbeat
-                          ? new Date(n.last_heartbeat).toLocaleString()
-                          : '—'}
+                        {n.last_heartbeat ? new Date(n.last_heartbeat).toLocaleString() : '—'}
                       </td>
-                      <td>
+                      <td onClick={e => e.stopPropagation()}>
                         <button className="btn btn-danger btn-sm" onClick={() => handleDelete(n.id)}>Delete</button>
                       </td>
                     </tr>
-                    {isExpanded && (
-                      <tr key={`n-${n.id}-detail`}>
-                        <td colSpan={10} style={{ padding: 0, background: 'var(--bg)' }}>
+                    {isDetail && st?.proxies && st.proxies.length > 0 && (
+                      <tr key={`${n.id}-detail`}>
+                        <td colSpan={9} style={{ padding: 0, background: 'var(--bg)' }}>
                           <div style={{ padding: '0.8rem 1.5rem' }}>
-                            {isLoading ? (
-                              <p style={{ color: 'var(--text-muted)' }}>Loading frps status…</p>
-                            ) : si ? (
-                              <div>
-                                <div style={{ display: 'flex', gap: '2rem', marginBottom: '0.8rem', fontSize: '0.85rem' }}>
-                                  <span>frps v{si.version}</span>
-                                  <span>Clients: {si.clientCounts}</span>
-                                  <span>Current: {si.curConns}</span>
-                                  <span>↓ {formatBytes(si.totalTrafficIn)}</span>
-                                  <span>↑ {formatBytes(si.totalTrafficOut)}</span>
-                                </div>
-                                {st?.proxies && st.proxies.length > 0 && (
-                                  <>
-                                    <p style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem' }}>Active Proxies on frps:</p>
-                                    <table style={{ fontSize: '0.8rem', width: '100%' }}>
-                                      <thead>
-                                        <tr style={{ color: 'var(--text-muted)' }}>
-                                          <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Name</th>
-                                          <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Status</th>
-                                          <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Local</th>
-                                          <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Remote</th>
-                                          <th style={{ textAlign: 'right', padding: '0.2rem 0.5rem' }}>Conns</th>
-                                          <th style={{ textAlign: 'right', padding: '0.2rem 0.5rem' }}>Traffic</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {st.proxies.map(p => (
-                                          <tr key={p.name}>
-                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.name}</td>
-                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.status}</td>
-                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.conf ? `${p.conf.localIP || '127.0.0.1'}:${p.conf.localPort || '?'}` : '—'}</td>
-                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.conf?.remotePort ? `0.0.0.0:${p.conf.remotePort}` : '—'}</td>
-                                            <td style={{ padding: '0.2rem 0.5rem', textAlign: 'right' }}>{p.curConns}</td>
-                                            <td style={{ padding: '0.2rem 0.5rem', textAlign: 'right' }}>{formatBytes(p.todayTrafficIn + p.todayTrafficOut)}</td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </>
-                                )}
-                                {(!st?.proxies || st.proxies.length === 0) && (
-                                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No active proxies on this frps node.</p>
-                                )}
-                              </div>
-                            ) : (
-                              <p style={{ color: 'var(--text-muted)' }}>Failed to reach frps admin API. Check dashboard credentials.</p>
-                            )}
+                            <p style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                              Active Proxies on {n.name}:
+                            </p>
+                            <table style={{ fontSize: '0.8rem', width: '100%' }}>
+                              <thead>
+                                <tr style={{ color: 'var(--text-muted)' }}>
+                                  <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Name</th>
+                                  <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Status</th>
+                                  <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Client ID</th>
+                                  <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Local</th>
+                                  <th style={{ textAlign: 'left', padding: '0.2rem 0.5rem' }}>Remote</th>
+                                  <th style={{ textAlign: 'right', padding: '0.2rem 0.5rem' }}>Traffic</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {st.proxies.map(p => (
+                                  <tr key={p.name}>
+                                    <td style={{ padding: '0.2rem 0.5rem' }}>{p.name}</td>
+                                    <td style={{ padding: '0.2rem 0.5rem' }}>{p.status}</td>
+                                    <td style={{ padding: '0.2rem 0.5rem', fontFamily: 'monospace', fontSize: '0.75rem' }}>{p.clientID || '—'}</td>
+                                    <td style={{ padding: '0.2rem 0.5rem' }}>{p.conf ? `${p.conf.localIP || '127.0.0.1'}:${p.conf.localPort || '?'}` : '—'}</td>
+                                    <td style={{ padding: '0.2rem 0.5rem' }}>{p.conf?.remotePort ? `0.0.0.0:${p.conf.remotePort}` : '—'}</td>
+                                    <td style={{ padding: '0.2rem 0.5rem', textAlign: 'right' }}>{formatBytes(p.todayTrafficIn + p.todayTrafficOut)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {isDetail && (!st?.proxies || st.proxies.length === 0) && (
+                      <tr key={`${n.id}-detail`}>
+                        <td colSpan={9} style={{ padding: 0, background: 'var(--bg)' }}>
+                          <div style={{ padding: '0.8rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                            {st ? 'No active proxies on this node.' : 'Failed to reach frps admin API. Check dashboard credentials.'}
                           </div>
                         </td>
                       </tr>
