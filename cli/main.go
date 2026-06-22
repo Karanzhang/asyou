@@ -154,11 +154,24 @@ func cmdExpose() {
 		if err == nil {
 			frpsHost = node.Host
 			frpsPort = node.BindPort
+		} else {
+			fmt.Fprintf(os.Stderr, "warning: cannot get node info: %v\n", err)
 		}
 	}
 	if frpsHost == "" {
-		// Try to parse from saved server URL
-		frpsHost = "127.0.0.1"
+		// Fall back to the server URL host (API and frps are on same machine)
+		frpsHost = client.BaseURL
+		// Strip protocol prefix
+		for _, p := range []string{"https://", "http://"} {
+			frpsHost = strings.TrimPrefix(frpsHost, p)
+		}
+		// Strip port and path
+		if idx := strings.Index(frpsHost, ":"); idx > 0 {
+			frpsHost = frpsHost[:idx]
+		}
+		if idx := strings.Index(frpsHost, "/"); idx > 0 {
+			frpsHost = frpsHost[:idx]
+		}
 		frpsPort = 7000
 	}
 	if frpsPort == 0 {
