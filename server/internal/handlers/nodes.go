@@ -283,12 +283,15 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
         json.NewEncoder(w).Encode(n)
     case http.MethodPut:
         var upd struct {
-            Name       *string `json:"name,omitempty"`
-            Host       *string `json:"host,omitempty"`
-            ApiPort    *int    `json:"api_port,omitempty"`
-            BindPort   *int    `json:"bind_port,omitempty"`
-            TlsEnabled *bool   `json:"tls_enabled,omitempty"`
-            AuthToken  *string `json:"auth_token,omitempty"`
+            Name           *string `json:"name,omitempty"`
+            Host           *string `json:"host,omitempty"`
+            ApiPort        *int    `json:"api_port,omitempty"`
+            BindPort       *int    `json:"bind_port,omitempty"`
+            TlsEnabled     *bool   `json:"tls_enabled,omitempty"`
+            AuthToken      *string `json:"auth_token,omitempty"`
+            DashboardPort  *int    `json:"dashboard_port,omitempty"`
+            DashboardUser  *string `json:"dashboard_user,omitempty"`
+            DashboardPwd   *string `json:"dashboard_pwd,omitempty"`
         }
         if err := json.NewDecoder(r.Body).Decode(&upd); err != nil {
             writeJSONError(w, "bad request", "BAD_REQUEST", http.StatusBadRequest)
@@ -324,6 +327,18 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
             set = append(set, "auth_token = ?")
             args = append(args, *upd.AuthToken)
         }
+        if upd.DashboardPort != nil {
+            set = append(set, "dashboard_port = ?")
+            args = append(args, *upd.DashboardPort)
+        }
+        if upd.DashboardUser != nil {
+            set = append(set, "dashboard_user = ?")
+            args = append(args, *upd.DashboardUser)
+        }
+        if upd.DashboardPwd != nil {
+            set = append(set, "dashboard_pwd = ?")
+            args = append(args, *upd.DashboardPwd)
+        }
         if len(set) == 0 {
             writeJSONError(w, "nothing to update", "BAD_REQUEST", http.StatusBadRequest)
             return
@@ -338,12 +353,10 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
         }
         // return updated node
         var n model.Node
-        var apiPort sql.NullInt64
-        var bindPort sql.NullInt64
-        var tlsEnabled sql.NullInt64
-        var lastHeartbeat sql.NullString
-        err = s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
-            Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &lastHeartbeat, &n.CreatedAt, &n.UpdatedAt)
+        var apiPort, bindPort, tlsEnabled, dashPort sql.NullInt64
+        var dashUser, lastHeartbeat sql.NullString
+        err = s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
+            Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &lastHeartbeat, &n.CreatedAt, &n.UpdatedAt)
         if err == sql.ErrNoRows {
             writeJSONError(w, "not found", "NOT_FOUND", http.StatusNotFound)
             return
@@ -351,15 +364,11 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
             writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
             return
         }
-        if apiPort.Valid {
-            n.ApiPort = int(apiPort.Int64)
-        }
-        if bindPort.Valid {
-            n.BindPort = int(bindPort.Int64)
-        }
-        if tlsEnabled.Valid {
-            n.TlsEnabled = tlsEnabled.Int64 != 0
-        }
+        if apiPort.Valid { n.ApiPort = int(apiPort.Int64) }
+        if bindPort.Valid { n.BindPort = int(bindPort.Int64) }
+        if tlsEnabled.Valid { n.TlsEnabled = tlsEnabled.Int64 != 0 }
+        if dashPort.Valid { n.DashboardPort = int(dashPort.Int64) }
+        if dashUser.Valid { n.DashboardUser = dashUser.String }
         if lastHeartbeat.Valid {
             if t, err := time.Parse(time.RFC3339, lastHeartbeat.String); err == nil {
                 n.LastHeartbeat = t
