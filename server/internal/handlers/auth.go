@@ -59,7 +59,11 @@ func (s *Server) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.DB.Exec(`INSERT INTO users (email, password_hash, display_name) VALUES (?, ?, ?)`, req.Email, string(hash), req.DisplayName)
 	if err != nil {
-		writeJSONError(w, "cannot create user", "INTERNAL", http.StatusInternalServerError)
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			writeJSONError(w, "email already registered", "CONFLICT", http.StatusConflict)
+		} else {
+			writeJSONError(w, "cannot create user", "INTERNAL", http.StatusInternalServerError)
+		}
 		return
 	}
 	id, _ := res.LastInsertId()
