@@ -152,6 +152,13 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
             }
             remotePortVal = startPort
         }
+        // Check for duplicate name per user
+        var count int
+        s.DB.QueryRow("SELECT COUNT(*) FROM proxies WHERE user_id = ? AND name = ?", mustGetUserID(r), req.Name).Scan(&count)
+        if count > 0 {
+            writeJSONError(w, "a tunnel with this name already exists", "CONFLICT", http.StatusConflict)
+            return
+        }
         res, err := s.DB.Exec(`INSERT INTO proxies (user_id, node_id, name, type, local_ip, local_port, remote_port, subdomain, custom_domains, enable_tls, status, annotations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, mustGetUserID(r), nodeID, req.Name, req.Type, localIP, req.LocalPort, remotePortVal, req.Subdomain, cdoms, 0, "stopped", "")
         if err != nil {
             writeJSONError(w, "cannot create proxy: "+err.Error(), "INTERNAL", http.StatusInternalServerError)
