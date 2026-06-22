@@ -193,10 +193,12 @@ type = tcp
 local_ip = 127.0.0.1
 local_port = %d
 `, frpsHost, frpsPort, tunnelName, port)
-	// Add remote_port if specified
+	// Add remote_port if specified by user or assigned by server
 	rp := *remotePort
 	if rp > 0 {
 		iniContent += fmt.Sprintf("remote_port = %d\n", rp)
+	} else if proxy.RemotePort != nil && *proxy.RemotePort > 0 {
+		iniContent += fmt.Sprintf("remote_port = %d\n", *proxy.RemotePort)
 	}
 	if err := os.WriteFile(cfgPath, []byte(iniContent), 0600); err != nil {
 		fmt.Fprintf(os.Stderr, "write config failed: %v\n", err)
@@ -242,11 +244,15 @@ local_port = %d
 	fmt.Printf("Tunnel #%d '%s' created. Starting frpc locally...\n", proxy.ID, proxy.Name)
 	fmt.Printf("Config: %s\n", cfgPath)
 	fmt.Printf("frpc:  %s\n", frpcPath)
-	fmt.Printf("\nRemote port will be shown in frps dashboard:\n")
-	fmt.Printf("  http://%s:7500 (user: admin / password in frps config)\n", frpsHost)
-	fmt.Printf("Or check: curl -s http://admin:admin%%40hf@%s:7500/api/proxy/tcp\n", frpsHost)
-	fmt.Printf("\nIf you specified --remote-port, access at:\n")
-	fmt.Printf("  http://%s:%d\n", frpsHost, *remotePort)
+	// Show access URL if remote_port is known
+	if proxy.RemotePort != nil && *proxy.RemotePort > 0 {
+		fmt.Printf("\n🚀 Access your service at:\n")
+		fmt.Printf("   http://%s:%d\n", frpsHost, *proxy.RemotePort)
+		fmt.Printf("   (Make sure firewall allows port %d)\n", *proxy.RemotePort)
+	} else {
+		fmt.Printf("\nRemote port will be shown in frps dashboard:\n")
+		fmt.Printf("  http://%s:7500 (user: admin / password in frps config)\n", frpsHost)
+	}
 	fmt.Println("")
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "frpc exited: %v\n", err)

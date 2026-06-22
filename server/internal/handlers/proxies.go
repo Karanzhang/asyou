@@ -3,6 +3,8 @@ package handlers
 import (
     "database/sql"
     "encoding/json"
+    "fmt"
+    "net"
     "net/http"
     "path"
     "strconv"
@@ -109,7 +111,21 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
         if req.NodeID != nil {
             nodeID = *req.NodeID
         }
-        res, err := s.DB.Exec(`INSERT INTO proxies (user_id, node_id, name, type, local_ip, local_port, remote_port, subdomain, custom_domains, enable_tls, status, annotations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, mustGetUserID(r), nodeID, req.Name, req.Type, localIP, req.LocalPort, req.RemotePort, req.Subdomain, cdoms, 0, "stopped", "")
+        // Auto-assign remote port if not specified
+        remotePortVal := req.RemotePort
+        if remotePortVal == nil && req.NodeID != nil {
+            // Query the node's bind_port to find a free port
+            var bindPort int
+            s.DB.QueryRow("SELECT bind_port FROM nodes WHERE id = ?", *req.NodeID).Scan(&bindPort)
+            if bindPort == 0 {
+                bindPort = 7000
+            }
+            freePort := s.findFreePort(bindPort)
+            if freePort > 0 {
+                remotePortVal = &freePort
+            }
+        }
+        res, err := s.DB.Exec(`INSERT INTO proxies (user_id, node_id, name, type, local_ip, local_port, remote_port, subdomain, custom_domains, enable_tls, status, annotations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, mustGetUserID(r), nodeID, req.Name, req.Type, localIP, req.LocalPort, remotePortVal, req.Subdomain, cdoms, 0, "stopped", "")
         if err != nil {
             writeJSONError(w, "cannot create proxy: "+err.Error(), "INTERNAL", http.StatusInternalServerError)
             return
@@ -567,6 +583,24 @@ func (s *Server) loadNode(nodeID *int64) (*model.Node, error) {
         }
     }
     return &n, nil
+}
+
+// findFreePort finds an available port starting from basePort+1 up to basePort+1000.
+// A port is considered free if nothing is listening on it.
+func (s *Server) findFreePort(basePort int) int {
+    // Try up to 500 ports starting from basePort+1
+    for port := 31000; port < 32000; port++ {
+        // Quick check: try to connect - if refused, port is free
+        // On Linux we can also check /proc/net/tcp but this is simpler
+        addr := fmt.Sprintf("127.0.0.1:%d", port)
+        // Just check if we can reserve it by listening briefly
+        ln, err := net.Listen("tcp", addr)
+        if err == nil {
+            ln.Close()
+            return port
+        }
+    }
+    return 0
 }
 
 // ProxyStatsHandler handles POST/GET /proxies/{id}/stats

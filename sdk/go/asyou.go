@@ -19,14 +19,16 @@ type Client struct {
 
 // Proxy represents a tunnel.
 type Proxy struct {
-	ID        int64  `json:"id"`
-	UserID    int64  `json:"user_id"`
-	NodeID    *int64 `json:"node_id,omitempty"`
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	LocalIP   string `json:"local_ip"`
-	LocalPort int    `json:"local_port"`
-	Status    string `json:"status"`
+	ID         int64  `json:"id"`
+	UserID     int64  `json:"user_id"`
+	NodeID     *int64 `json:"node_id,omitempty"`
+	Name       string `json:"name"`
+	Type       string `json:"type"`
+	LocalIP    string `json:"local_ip"`
+	LocalPort  int    `json:"local_port"`
+	RemotePort *int   `json:"remote_port,omitempty"`
+	Subdomain  *string `json:"subdomain,omitempty"`
+	Status     string `json:"status"`
 }
 
 // Node represents a frps server.
