@@ -82,23 +82,30 @@ export interface ApiKey {
 
 export interface FrpsServerInfo {
   version: string
-  total_conns: number
-  current_conns: number
-  total_traffic_in: number
-  total_traffic_out: number
-  uptime: string
+  bindPort: number
+  totalTrafficIn: number
+  totalTrafficOut: number
+  curConns: number
+  clientCounts: number
+}
+
+export interface FrpsProxyConf {
+  remotePort?: number
+  localIP?: string
+  localPort?: number
+  type?: string
 }
 
 export interface FrpsProxyEntry {
   name: string
-  type: string
+  conf?: FrpsProxyConf
   status: string
-  local_addr: string
-  remote_addr: string
-  bytes_in: number
-  bytes_out: number
-  conn_count: number
-  last_err: string
+  clientID?: string
+  todayTrafficIn: number
+  todayTrafficOut: number
+  curConns: number
+  lastStartTime?: string
+  lastCloseTime?: string
 }
 
 export interface NodeStatusResponse {

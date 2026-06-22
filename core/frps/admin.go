@@ -9,25 +9,38 @@ import (
 
 // ServerInfo holds basic frps runtime information.
 type ServerInfo struct {
-	Version       string `json:"version"`
-	TotalConns    int    `json:"total_conns"`
-	CurrentConns  int    `json:"current_conns"`
-	TotalTrafficIn  int64 `json:"total_traffic_in"`
-	TotalTrafficOut int64 `json:"total_traffic_out"`
-	Uptime        string `json:"uptime"`
+	Version         string `json:"version"`
+	BindPort        int    `json:"bindPort"`
+	TotalTrafficIn  int64  `json:"totalTrafficIn"`
+	TotalTrafficOut int64  `json:"totalTrafficOut"`
+	CurConns        int    `json:"curConns"`
+	ClientCounts    int    `json:"clientCounts"`
+}
+
+// ProxyConf holds the configuration of a proxy from frps admin API.
+type ProxyConf struct {
+	RemotePort int    `json:"remotePort"`
+	LocalIP    string `json:"localIP"`
+	LocalPort  int    `json:"localPort"`
+	Type       string `json:"type"`
 }
 
 // ProxyEntry is a single proxy as returned by the frps admin API.
 type ProxyEntry struct {
-	Name             string `json:"name"`
-	Type             string `json:"type"`
-	Status           string `json:"status"`
-	LocalAddr        string `json:"local_addr"`
-	RemoteAddr       string `json:"remote_addr"`
-	BytesIn          int64  `json:"bytes_in"`
-	BytesOut         int64  `json:"bytes_out"`
-	ConnCount        int    `json:"conn_count"`
-	LastError        string `json:"last_err"`
+	Name            string     `json:"name"`
+	Conf            *ProxyConf `json:"conf"`
+	Status          string     `json:"status"`
+	ClientID        string     `json:"clientID"`
+	TodayTrafficIn  int64      `json:"todayTrafficIn"`
+	TodayTrafficOut int64      `json:"todayTrafficOut"`
+	CurConns        int        `json:"curConns"`
+	LastStartTime   string     `json:"lastStartTime"`
+	LastCloseTime   string     `json:"lastCloseTime"`
+}
+
+// ProxyListResponse wraps the proxy list returned by frps admin API.
+type ProxyListResponse struct {
+	Proxies []ProxyEntry `json:"proxies"`
 }
 
 // AdminClient communicates with frps's built-in admin API.
@@ -65,13 +78,13 @@ func (c *AdminClient) GetServerInfo() (*ServerInfo, error) {
 	return &info, nil
 }
 
-// ListProxies fetches /api/proxy/:type (or /api/proxy/tcp etc.) from frps.
+// ListProxies fetches /api/proxy/:type from frps and returns the proxy list.
 func (c *AdminClient) ListProxies(proxyType string) ([]ProxyEntry, error) {
-	var list []ProxyEntry
-	if err := c.get("/api/proxy/"+proxyType, &list); err != nil {
+	var resp ProxyListResponse
+	if err := c.get("/api/proxy/"+proxyType, &resp); err != nil {
 		return nil, err
 	}
-	return list, nil
+	return resp.Proxies, nil
 }
 
 // ListAllProxies fetches all proxy types from frps.

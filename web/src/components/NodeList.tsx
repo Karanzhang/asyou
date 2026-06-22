@@ -143,10 +143,10 @@ export default function NodeList() {
                       </td>
                       <td>{n.weight ?? '1.0'}</td>
                       <td style={{ fontWeight: 600 }}>
-                        {isLoading ? '…' : si ? `${si.current_conns} / ${si.total_conns}` : '—'}
+                        {isLoading ? '…' : si ? `${si.curConns} / ${si.clientCounts}` : '—'}
                       </td>
                       <td style={{ fontSize: '0.8rem' }}>
-                        {isLoading ? '…' : si ? formatBytes(si.total_traffic_in + si.total_traffic_out) : '—'}
+                        {isLoading ? '…' : si ? formatBytes(si.totalTrafficIn + si.totalTrafficOut) : '—'}
                       </td>
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {n.last_heartbeat
@@ -167,11 +167,10 @@ export default function NodeList() {
                               <div>
                                 <div style={{ display: 'flex', gap: '2rem', marginBottom: '0.8rem', fontSize: '0.85rem' }}>
                                   <span>frps v{si.version}</span>
-                                  <span>Uptime: {si.uptime}</span>
-                                  <span>Total conns: {si.total_conns}</span>
-                                  <span>Current: {si.current_conns}</span>
-                                  <span>↓ {formatBytes(si.total_traffic_in)}</span>
-                                  <span>↑ {formatBytes(si.total_traffic_out)}</span>
+                                  <span>Clients: {si.clientCounts}</span>
+                                  <span>Current: {si.curConns}</span>
+                                  <span>↓ {formatBytes(si.totalTrafficIn)}</span>
+                                  <span>↑ {formatBytes(si.totalTrafficOut)}</span>
                                 </div>
                                 {st?.proxies && st.proxies.length > 0 && (
                                   <>
@@ -192,10 +191,10 @@ export default function NodeList() {
                                           <tr key={p.name}>
                                             <td style={{ padding: '0.2rem 0.5rem' }}>{p.name}</td>
                                             <td style={{ padding: '0.2rem 0.5rem' }}>{p.status}</td>
-                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.local_addr}</td>
-                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.remote_addr || '—'}</td>
-                                            <td style={{ padding: '0.2rem 0.5rem', textAlign: 'right' }}>{p.conn_count}</td>
-                                            <td style={{ padding: '0.2rem 0.5rem', textAlign: 'right' }}>{formatBytes(p.bytes_in + p.bytes_out)}</td>
+                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.conf ? `${p.conf.localIP || '127.0.0.1'}:${p.conf.localPort || '?'}` : '—'}</td>
+                                            <td style={{ padding: '0.2rem 0.5rem' }}>{p.conf?.remotePort ? `0.0.0.0:${p.conf.remotePort}` : '—'}</td>
+                                            <td style={{ padding: '0.2rem 0.5rem', textAlign: 'right' }}>{p.curConns}</td>
+                                            <td style={{ padding: '0.2rem 0.5rem', textAlign: 'right' }}>{formatBytes(p.todayTrafficIn + p.todayTrafficOut)}</td>
                                           </tr>
                                         ))}
                                       </tbody>
