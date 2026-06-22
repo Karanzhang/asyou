@@ -389,18 +389,47 @@ func (s *Server) NodeStatusHandler(w http.ResponseWriter, r *http.Request, idStr
 
     // Load node
     var n model.Node
-    var dashPort, tlsEnabled, maxConn, isActive sql.NullInt64
+    var nApiPort, bindPort, dashPort, tlsEnabled, maxConn, isActive sql.NullInt64
     var dashUser, dashPwd, frpVer, lastHb, region, country, city sql.NullString
     var lat, lng, weight sql.NullFloat64
     var createdAt, updatedAt sql.NullString
     err = s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, dashboard_pwd, frp_version, region, country, city, latitude, longitude, max_connections, weight, is_active, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
-        Scan(&n.ID, &n.Name, &n.Host, &n.ApiPort, &n.BindPort, &tlsEnabled, &dashPort, &dashUser, &dashPwd, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &isActive, &lastHb, &createdAt, &updatedAt)
+        Scan(&n.ID, &n.Name, &n.Host, &nApiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &dashPwd, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &isActive, &lastHb, &createdAt, &updatedAt)
     if err == sql.ErrNoRows {
         writeJSONError(w, "not found", "NOT_FOUND", http.StatusNotFound)
         return
     } else if err != nil {
         writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
         return
+    }
+    if nApiPort.Valid { n.ApiPort = int(nApiPort.Int64) }
+    if bindPort.Valid { n.BindPort = int(bindPort.Int64) }
+    if tlsEnabled.Valid { n.TlsEnabled = tlsEnabled.Int64 != 0 }
+    if dashPort.Valid { n.DashboardPort = int(dashPort.Int64) }
+    if dashUser.Valid { n.DashboardUser = dashUser.String }
+    if frpVer.Valid { n.FrpVersion = frpVer.String }
+    if region.Valid { n.Region = region.String }
+    if country.Valid { n.Country = country.String }
+    if city.Valid { n.City = city.String }
+    if lat.Valid { n.Latitude = lat.Float64 }
+    if lng.Valid { n.Longitude = lng.Float64 }
+    if maxConn.Valid { n.MaxConnections = int(maxConn.Int64) }
+    if weight.Valid { n.Weight = weight.Float64 }
+    if isActive.Valid { n.IsActive = isActive.Int64 != 0 }
+    if lastHb.Valid {
+        if t, err := time.Parse(time.RFC3339, lastHb.String); err == nil {
+            n.LastHeartbeat = t
+        }
+    }
+    if createdAt.Valid {
+        if t, err := time.Parse(time.RFC3339, createdAt.String); err == nil {
+            n.CreatedAt = t
+        }
+    }
+    if updatedAt.Valid {
+        if t, err := time.Parse(time.RFC3339, updatedAt.String); err == nil {
+            n.UpdatedAt = t
+        }
     }
 
     // Build admin client and query frps
