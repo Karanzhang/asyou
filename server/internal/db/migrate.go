@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -31,8 +32,9 @@ func RunMigrations(db *sql.DB, _ string) error {
 
 	for _, name := range entries {
 		// Extract version number from filename (e.g. 0001_init.sql → 1)
+		base := filepath.Base(name)
 		version := 0
-		fmt.Sscanf(name, "%d", &version)
+		fmt.Sscanf(base, "%d", &version)
 
 		// Check if already applied
 		var count int
