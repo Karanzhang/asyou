@@ -116,10 +116,11 @@ func cmdExpose() {
 	fs := flag.NewFlagSet("expose", flag.ExitOnError)
 	name := fs.String("n", "", "Tunnel name (default: auto)")
 	nodeID := fs.Int("node", 0, "Node ID")
+	remotePort := fs.Int("remote-port", 0, "Remote port (optional, auto-assigned if empty)")
 	fs.Parse(os.Args[2:])
 	args := fs.Args()
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: asyou expose [--n <name>] [--node <id>] <local_port>")
+		fmt.Fprintln(os.Stderr, "Usage: asyou expose [--n <name>] [--node <id>] [--remote-port <port>] <local_port>")
 		os.Exit(1)
 	}
 	client := loadConfig()
@@ -140,7 +141,7 @@ func cmdExpose() {
 		os.Exit(1)
 	}
 
-	proxy, err := client.CreateProxy(tunnelName, "tcp", port, *nodeID)
+	proxy, err := client.CreateProxy(tunnelName, "tcp", port, *nodeID, *remotePort)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create failed: %v\n", err)
 		os.Exit(1)
@@ -192,6 +193,11 @@ type = tcp
 local_ip = 127.0.0.1
 local_port = %d
 `, frpsHost, frpsPort, tunnelName, port)
+	// Add remote_port if specified
+	rp := *remotePort
+	if rp > 0 {
+		iniContent += fmt.Sprintf("remote_port = %d\n", rp)
+	}
 	if err := os.WriteFile(cfgPath, []byte(iniContent), 0600); err != nil {
 		fmt.Fprintf(os.Stderr, "write config failed: %v\n", err)
 		os.Exit(1)
