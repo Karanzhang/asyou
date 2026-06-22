@@ -110,7 +110,7 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
             }
             for _, p := range proxies {
                 if idx, ok := np.names[p.Name]; ok && p.Status == "online" {
-                    list[idx].Status = "running (local)"
+                    list[idx].Status = "running"
                 }
             }
         }
@@ -448,6 +448,13 @@ func (s *Server) ProxyActionHandler(w http.ResponseWriter, r *http.Request, idSt
         writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
         return
     }
+
+    // Check live status from frps before acting
+    liveStatus := ""
+    if proxy.NodeID != nil {
+        liveStatus = s.checkProxyLiveStatus(*proxy.NodeID, proxy.Name)
+    }
+
     node, err := s.loadNode(proxy.NodeID)
     if err != nil && err != sql.ErrNoRows {
         writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
@@ -455,6 +462,16 @@ func (s *Server) ProxyActionHandler(w http.ResponseWriter, r *http.Request, idSt
     }
     switch body.Action {
     case "start":
+        // If already running on frps (local frpc), just update DB
+        if liveStatus == "running" || proxy.Status == "running" {
+            _, err := s.DB.Exec(`UPDATE proxies SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, "running", id)
+            if err == nil {
+                s.broadcastProxyUpdate(id, "running", "")
+            }
+            w.WriteHeader(http.StatusAccepted)
+            return
+        }
+        // Not running on frps — try server-managed start
         if s.FRP == nil {
             writeJSONError(w, "frp manager unavailable", "INTERNAL", http.StatusInternalServerError)
             return
@@ -472,6 +489,16 @@ func (s *Server) ProxyActionHandler(w http.ResponseWriter, r *http.Request, idSt
         s.broadcastProxyUpdate(id, "running", "")
         w.WriteHeader(http.StatusAccepted)
     case "stop":
+        if liveStatus == "running" {
+            // Running via local frpc — can't kill it from here, just update DB
+            _, err := s.DB.Exec(`UPDATE proxies SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, "stopped", id)
+            if err == nil {
+                s.broadcastProxyUpdate(id, "stopped", "")
+            }
+            w.WriteHeader(http.StatusAccepted)
+            return
+        }
+        // Server-managed stop
         if s.FRP == nil {
             writeJSONError(w, "frp manager unavailable", "INTERNAL", http.StatusInternalServerError)
             return
@@ -489,7 +516,16 @@ func (s *Server) ProxyActionHandler(w http.ResponseWriter, r *http.Request, idSt
         s.broadcastProxyUpdate(id, "stopped", "")
         w.WriteHeader(http.StatusAccepted)
     case "reload":
-        // implement reload as stop then start, recording errors to annotations
+        if liveStatus == "running" {
+            // Local frpc — just toggle DB status to trigger re-check
+            _, err := s.DB.Exec(`UPDATE proxies SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, "running", id)
+            if err == nil {
+                s.broadcastProxyUpdate(id, "running", "")
+            }
+            w.WriteHeader(http.StatusAccepted)
+            return
+        }
+        // Server-managed reload
         if s.FRP == nil {
             writeJSONError(w, "frp manager unavailable", "INTERNAL", http.StatusInternalServerError)
             return
@@ -654,7 +690,7 @@ func (s *Server) checkProxyLiveStatus(nodeID int64, proxyName string) string {
     }
     for _, p := range list {
         if p.Name == proxyName && p.Status == "online" {
-            return "running (local)"
+            return "running"
         }
     }
     return ""
