@@ -33,6 +33,8 @@ func main() {
 		cmdDelete()
 	case "logout":
 		cmdLogout()
+	case "start":
+		cmdStart()
 	case "nodes":
 		cmdNodes()
 	default:
@@ -51,6 +53,7 @@ Usage:
   asyou expose [--n <name>] [--node <id>] [--remote-port <port>] <local_port>   Create & start a tunnel (--node optional; auto-selects if omitted)
   asyou list                              List your tunnels
   asyou delete <id>                       Delete a tunnel
+  asyou start <id>                        Start frpc for an existing tunnel
   asyou nodes                             List available nodes`)
 }
 
@@ -281,27 +284,111 @@ local_port = %d
 		os.Exit(1)
 	}
 
-	// Find frpc binary
-	frpcPath := ""
-	candidates := []string{
-		"frpc",
-		filepath.Join(filepath.Dir(os.Args[0]), "frpc"),
-		filepath.Join(filepath.Dir(os.Args[0]), "frpc.exe"),
-		"C:\\Windows\\System32\\frpc.exe",
-		"/usr/local/bin/frpc",
-		"/usr/bin/frpc",
+	fmt.Printf("Tunnel #%d '%s' created.\n", proxy.ID, proxy.Name)
+	runFrpc(cfgPath, "", proxy, frpsHost)
+}
+
+func cmdStart() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, "Usage: asyou start <id>")
+		os.Exit(1)
 	}
-	for _, c := range candidates {
-		if path, err := exec.LookPath(c); err == nil {
-			frpcPath = path
-			break
-		}
-		if _, err := os.Stat(c); err == nil {
-			frpcPath = c
-			break
-		}
+	client := loadConfig()
+	if client.Token() == "" {
+		fmt.Fprintln(os.Stderr, "Not logged in. Run 'asyou login' first.")
+		os.Exit(1)
+	}
+	var id int64
+	fmt.Sscanf(os.Args[2], "%d", &id)
+	if id == 0 {
+		fmt.Fprintf(os.Stderr, "invalid id: %s\n", os.Args[2])
+		os.Exit(1)
 	}
 
+	proxy, err := client.GetProxy(id)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "get proxy failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Resolve frps host:port from node
+	var frpsHost string
+	var frpsPort int
+	if proxy.NodeID != nil && *proxy.NodeID > 0 {
+		node, err := client.GetNode(*proxy.NodeID)
+		if err == nil {
+			frpsHost = node.Host
+			frpsPort = node.BindPort
+			fmt.Printf("[asyou] node #%d: host=%s bind_port=%d\n", *proxy.NodeID, frpsHost, frpsPort)
+		} else {
+			fmt.Fprintf(os.Stderr, "warning: cannot get node info: %v\n", err)
+		}
+	}
+	if frpsHost == "" {
+		frpsHost = client.BaseURL
+		for _, p := range []string{"https://", "http://"} {
+			frpsHost = strings.TrimPrefix(frpsHost, p)
+		}
+		if idx := strings.Index(frpsHost, ":"); idx > 0 {
+			frpsHost = frpsHost[:idx]
+		}
+		if idx := strings.Index(frpsHost, "/"); idx > 0 {
+			frpsHost = frpsHost[:idx]
+		}
+		frpsPort = 7000
+		fmt.Printf("[asyou] using fallback frps: %s:%d\n", frpsHost, frpsPort)
+	}
+	if frpsPort == 0 {
+		frpsPort = 7000
+	}
+
+	// Generate frpc config
+	cfgDir, _ := os.UserConfigDir()
+	cfgPath := filepath.Join(cfgDir, "asyou", fmt.Sprintf("proxy-%d.ini", proxy.ID))
+	os.MkdirAll(filepath.Dir(cfgPath), 0755)
+
+	iniContent := fmt.Sprintf(`[common]
+server_addr = %s
+server_port = %d
+
+[%s]
+type = %s
+local_ip = 127.0.0.1
+local_port = %d
+`, frpsHost, frpsPort, proxy.Name, proxy.Type, proxy.LocalPort)
+	if proxy.RemotePort != nil && *proxy.RemotePort > 0 {
+		iniContent += fmt.Sprintf("remote_port = %d\n", *proxy.RemotePort)
+	}
+	if err := os.WriteFile(cfgPath, []byte(iniContent), 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "write config failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("[asyou] generated config: %s\n", cfgPath)
+
+	runFrpc(cfgPath, "", proxy, frpsHost)
+}
+
+func runFrpc(cfgPath, frpcPath string, proxy *sdk.Proxy, frpsHost string) {
+	if frpcPath == "" {
+		candidates := []string{
+			"frpc",
+			filepath.Join(filepath.Dir(os.Args[0]), "frpc"),
+			filepath.Join(filepath.Dir(os.Args[0]), "frpc.exe"),
+			"C:\\Windows\\System32\\frpc.exe",
+			"/usr/local/bin/frpc",
+			"/usr/bin/frpc",
+		}
+		for _, c := range candidates {
+			if path, err := exec.LookPath(c); err == nil {
+				frpcPath = path
+				break
+			}
+			if _, err := os.Stat(c); err == nil {
+				frpcPath = c
+				break
+			}
+		}
+	}
 	if frpcPath == "" {
 		fmt.Fprintln(os.Stderr, "Error: frpc not found.")
 		fmt.Fprintln(os.Stderr, "")
@@ -313,21 +400,15 @@ local_port = %d
 		fmt.Fprintf(os.Stderr, "Or run frpc directly with the config at:\n  %s -c %s\n", "frpc", cfgPath)
 		os.Exit(1)
 	}
-
 	cmd := exec.Command(frpcPath, "-c", cfgPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	fmt.Printf("Tunnel #%d '%s' created. Starting frpc locally...\n", proxy.ID, proxy.Name)
 	fmt.Printf("Config: %s\n", cfgPath)
 	fmt.Printf("frpc:  %s\n", frpcPath)
-	// Show access URL if remote_port is known
 	if proxy.RemotePort != nil && *proxy.RemotePort > 0 {
 		fmt.Printf("\n🚀 Access your service at:\n")
 		fmt.Printf("   http://%s:%d\n", frpsHost, *proxy.RemotePort)
 		fmt.Printf("   (Make sure firewall allows port %d)\n", *proxy.RemotePort)
-	} else {
-		fmt.Printf("\nRemote port will be shown in frps dashboard:\n")
-		fmt.Printf("  http://%s:7500 (user: admin / password in frps config)\n", frpsHost)
 	}
 	fmt.Println("")
 	if err := cmd.Run(); err != nil {
