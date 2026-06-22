@@ -240,7 +240,7 @@ cd web && npm run build
 | **Local Port** | 是 | 本地服务监听的端口 |
 | **Remote Port** | 否 | 在 frps 上申请的特定端口（留空则自动分配） |
 | **Subdomain** | 否 | HTTP 类型隧道的子域名 |
-| **Node** | 是 | 目标 frps 节点（下拉列表数据来自 API） |
+| **Node** | 是 | 目标 frps 节点（下拉列表数据来自 API）。如果只有一个节点，自动选中。 |
 
 点击 **Create** — 成功后，隧道列表中会出现一条新记录，初始状态为 `stopped`。
 
@@ -306,6 +306,31 @@ cd web && npm run build
 - **指标**：**KB/s In**（入站流量，绿色折线）和 **KB/s Out**（出站流量，蓝色折线）
 - **时间范围**：展示最近几分钟的数据
 
+#### 4.5.5 本地 frpc 配置
+
+每个隧道详情页底部有 **Local frpc Setup** 区域，展示如何在用户自己的机器上运行 frpc：
+
+| 功能 | 说明 |
+|------|------|
+| **frpc 命令** | 直接可用的命令，如 `frpc -c my-tunnel.ini` |
+| **配置预览** | 显示生成的 `frpc.ini` 内容，含复制按钮 |
+| **⬇ .ini 下载** | 直接下载配置文件 |
+| **⬇ run script 下载** | 下载平台特定的运行脚本，**自动下载 frpc** |
+
+`run script` 会自动处理 frpc 安装：
+- 检查本地是否存在 `frpc`
+- 如果找不到，自动从 GitHub Releases 下载正确版本
+- 根据浏览器自动检测 OS（Windows/Linux/macOS）和架构（amd64/386）
+- 解压并运行 frpc
+
+**工作流程**：
+```bash
+# 1. Web 仪表盘进入隧道详情
+# 2. 点击 ⬇ .ini 下载配置
+# 3. 点击 ⬇ run script 下载启动脚本
+# 4. 两个文件放同一目录，双击脚本运行
+```
+
 ---
 
 ### 4.6 节点管理
@@ -318,13 +343,17 @@ cd web && npm run build
 
 | 列 | 说明 |
 |----|------|
-| **ID** | 节点 ID |
-| **Name** | 节点名称 |
-| **Host** | 节点主机地址 |
-| **API Port** | frps 管理 API 端口 |
-| **Bind Port** | frps 隧道绑定端口 |
-| **Status** | 在线状态（通过心跳判断） |
+| **Status** | 在线/离线状态标识（基于 5 分钟心跳超时） |
+| **Name** | 节点名称，如有调度评分也会显示 |
+| **Host:Port** | 节点主机地址和绑定端口 |
+| **Region** | 地理区域和国家（如 `ap-east (HK)`） |
+| **Weight** | 调度权重（越高分配越多隧道） |
+| **Max Conns** | 最大连接数 |
+| **frp Ver** | frps 版本 |
+| **Heartbeat** | 最近心跳时间 |
 | **Actions** | 删除按钮 |
+
+顶部统计栏显示 **总节点数 / 在线 / 离线** 计数。
 
 #### 4.6.2 添加节点
 
@@ -336,10 +365,14 @@ cd web && npm run build
 | **API Port** | 否 | frps 管理 API 端口（`--admin_port`） |
 | **Auth Token** | 否 | frps `token` 认证（如果已配置） |
 | **TLS** | 否 | 是否启用 TLS |
-| **Region** | 否 | 地理区域（例如 `us-east`、`ap-southeast`） |
-| **Country** | 否 | 国家 |
-| **City** | 否 | 城市 |
-| **Lat/Lng** | 否 | GPS 坐标，用于地理邻近度调度 |
+| **调度** | | |
+| **Weight** | 否 | 调度权重乘数（默认 `1.0`），越高分配越多隧道 |
+| **Max Connections** | 否 | 容量上限（默认 `100`） |
+| **地理位置** | | 用于地理就近调度 |
+| **Region** | 否 | 如 `ap-east`、`us-west` |
+| **Country** | 否 | 如 `HK`、`US` |
+| **City** | 否 | 如 `Hong Kong` |
+| **Latitude / Longitude** | 否 | GPS 坐标 — 调度器优先选距离近的节点 |
 
 ---
 
@@ -508,36 +541,52 @@ asyou login --s https://asyou.example.com admin@example.com mypassword
 asyou logout
 ```
 
-#### `asyou expose [--n <name>] [--node <id>] <local_port>`
+#### `asyou expose [--n <name>] [--node <id>] [--remote-port <port>] <local_port>`
 
-创建并启动隧道 — "一键暴露"。
+创建隧道并在本地启动 frpc — "一键暴露"。
+
+> **参数可任意位置**：flag 可以出现在端口号之前或之后。
 
 ```bash
-# 暴露 3000 端口，自动生成名称
+# 暴露 3000 端口 — 如果只有一个节点则自动选择
 asyou expose 3000
 
 # 自定义名称并指定节点
 asyou expose 8080 --n my-web-app --node 2
+
+# 指定远程端口
+asyou expose 3000 -n my-app --remote-port 31000
+
+# 先查看可用节点
+asyou nodes
+# ID   Name          Host              Port
+# 1    hk-main       110.42.215.183    7001
+# 2    hk-standby    110.42.215.183    7002
+
+# 再指定节点
+asyou expose 3000 -n my-app --node 1
 ```
 
 #### `asyou list`
 
-列出所有隧道及其状态。
+列出所有隧道及其状态和远程端口。
 
 ```bash
 $ asyou list
-ID   Name                 Type     Port   Status
-1    my-web-app           tcp      8080   running
-2    api-backend          tcp      4000   stopped
+ID   Name                 Type     LPort    RPort    Status
+1    my-web-app           tcp      8080     31001    running
+2    api-backend          tcp      4000     -        stopped
 ```
 
 #### `asyou delete <id>`
 
-按 ID 删除隧道。
+按 ID 删除隧道。同时清理本地 frpc 配置文件（`proxy-{id}.ini`）。
 
 ```bash
 asyou delete 2
+# → [asyou] deleting tunnel #2 "api-backend" (status=stopped)
 # → Tunnel #2 deleted
+# → [asyou] cleaned up local config: C:\Users\...\asyou\proxy-2.ini
 ```
 
 #### `asyou nodes`

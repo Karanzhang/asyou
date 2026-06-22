@@ -70,7 +70,7 @@ asyou/
 │   ├── go/                 # Go SDK
 │   ├── python/             # Python SDK
 │   └── node/               # Node.js/TypeScript SDK
-├── migrations/             # SQLite migration files
+├── server/migrations/      # SQLite migration files
 │   ├── 0001_init.sql
 │   ├── 0003_certs.sql
 │   └── 0004_node_geo.sql
@@ -517,9 +517,9 @@ cd core && go test ./...
 
 ### 10.4 Database Migrations
 
-Migrations are in `migrations/`. The server runs them automatically on startup using `CREATE TABLE IF NOT EXISTS`.
+Migrations are in `server/migrations/`. The server runs them automatically on startup using `CREATE TABLE IF NOT EXISTS`.
 
-New migration: create `migrations/XXXX_description.sql` — they execute in alphabetical order.
+New migration: create `server/migrations/XXXX_description.sql` — they execute in alphabetical order.
 
 ---
 

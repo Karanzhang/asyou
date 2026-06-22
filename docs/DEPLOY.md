@@ -95,6 +95,15 @@ sudo tee /etc/frps.toml << 'EOF'
 [common]
 bind_port = 7000
 bind_addr = "0.0.0.0"
+allow_ports = "31000-31999"
+
+# Optional: HTTP/HTTPS virtual host ports (for http/https proxy types)
+# vhost_http_port = 80
+# vhost_https_port = 443
+
+# Optional: KCP/QUIC transport
+# kcp_bind_port = 7000
+# bind_udp_port = 7001
 
 # Optional Dashboard
 dashboard_port = 7500
@@ -135,6 +144,127 @@ asyou-server &
 curl http://localhost:8080/
 # → "asyou server is running..."
 ```
+
+---
+
+## 5.3 Single-Server Cluster Simulation
+
+一台机器上跑多个 frps 实例（端口不同），模拟多节点集群，用来测试调度器、故障转移等。
+
+### 5.3.1 创建多个 frps 配置
+
+```bash
+# 节点 1 — 主节点
+sudo tee /etc/frps-node1.toml << 'EOF'
+[common]
+bind_addr = "0.0.0.0"
+bind_port = 7001
+allow_ports = "31000-31199"
+token = "node1-secret"
+
+dashboard_port = 7501
+dashboard_user = "admin"
+dashboard_pwd = "CHANGE_THIS"
+
+log_file = "/var/log/frps-node1.log"
+log_level = "info"
+log_max_days = 7
+EOF
+
+# 节点 2 — 备用节点
+sudo tee /etc/frps-node2.toml << 'EOF'
+[common]
+bind_addr = "0.0.0.0"
+bind_port = 7002
+allow_ports = "31200-31399"
+token = "node2-secret"
+
+dashboard_port = 7502
+dashboard_user = "admin"
+dashboard_pwd = "CHANGE_THIS"
+
+log_file = "/var/log/frps-node2.log"
+log_level = "info"
+log_max_days = 7
+EOF
+
+# 节点 3 — 低优先级节点（weight 小，模拟性能差）
+sudo tee /etc/frps-node3.toml << 'EOF'
+[common]
+bind_addr = "0.0.0.0"
+bind_port = 7003
+allow_ports = "31400-31599"
+token = "node3-secret"
+
+dashboard_port = 7503
+dashboard_user = "admin"
+dashboard_pwd = "CHANGE_THIS"
+
+log_file = "/var/log/frps-node3.log"
+log_level = "info"
+log_max_days = 7
+EOF
+```
+
+### 5.3.2 启动所有 frps 实例
+
+```bash
+sudo frps -c /etc/frps-node1.toml &
+sudo frps -c /etc/frps-node2.toml &
+sudo frps -c /etc/frps-node3.toml &
+
+# 验证全部启动
+ss -tlnp | grep frps
+# 应看到 7001 7002 7003 7501 7502 7503
+```
+
+### 5.3.3 注册节点到 asyou
+
+```bash
+# 先登录（获取 token）
+LOGIN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"your-password"}')
+TOKEN=$(echo "$LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+AUTH="Authorization: Bearer $TOKEN"
+
+# 注册节点 1（权重 1.0 = 正常）
+curl -X POST http://localhost:8080/api/v1/nodes \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"name":"hk-main","host":"YOUR_SERVER_IP","api_port":7501,"bind_port":7001,"auth_token":"node1-secret","region":"ap-east","country":"HK","city":"Hong Kong","latitude":22.3193,"longitude":114.1694,"max_connections":100,"weight":1.0}'
+
+# 注册节点 2（权重 0.8 = 少分配一些）
+curl -X POST http://localhost:8080/api/v1/nodes \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"name":"hk-standby","host":"YOUR_SERVER_IP","api_port":7502,"bind_port":7002,"auth_token":"node2-secret","region":"ap-east","country":"HK","city":"Hong Kong","latitude":22.3193,"longitude":114.1694,"max_connections":80,"weight":0.8}'
+
+# 注册节点 3（权重 0.3 = 低优先级）
+curl -X POST http://localhost:8080/api/v1/nodes \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"name":"hk-low","host":"YOUR_SERVER_IP","api_port":7503,"bind_port":7003,"auth_token":"node3-secret","region":"ap-east","country":"HK","city":"Hong Kong","latitude":22.3193,"longitude":114.1694,"max_connections":50,"weight":0.3}'
+```
+
+### 5.3.4 验证
+
+```bash
+# 查看节点列表
+curl -s http://localhost:8080/api/v1/nodes -H "$AUTH" | python3 -m json.tool
+
+# CLI 查看
+./asyou nodes
+
+# 示例输出：
+# ID   Name          Host              Port
+# 1    hk-main       YOUR_SERVER_IP    7001
+# 2    hk-standby    YOUR_SERVER_IP    7002
+# 3    hk-low        YOUR_SERVER_IP    7003
+
+# 创建隧道（不指定节点，调度器自动选最优）
+./asyou expose 3000 -n my-app
+# → auto-selected node #1 "hk-main" (highest weight)
+```
+
+调度器会根据 `weight`、`max_connections`、延迟等自动分配隧道到不同 frps 实例。可以通过调整这些参数模拟不同场景。
 
 ---
 
@@ -270,6 +400,7 @@ sudo systemctl reload nginx
 ### 7.2 Provision SSL Certificate
 
 ```bash
+sudo apt install -y python3-certbot-nginx
 sudo certbot --nginx -d asyou.example.com --non-interactive --agree-tos -m admin@example.com
 
 # Auto-renewal (configured by default)

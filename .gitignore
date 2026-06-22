@@ -8,6 +8,10 @@ Thumbs.db
 *.test
 *.out
 
+# Go binaries (compiled in module directories)
+server/server
+cli/asyou
+
 # Node
 node_modules/
 dist/
@@ -20,5 +24,9 @@ desktop/build/
 *.db-wal
 *.db-shm
 
+# Build artifacts
+*.tsbuildinfo
+
 # Temp
 tmp/
+note.md

@@ -240,7 +240,7 @@ Click the **"+ New Tunnel"** button to expand the inline creation form:
 | **Local Port** | Yes | The port your local service runs on |
 | **Remote Port** | No | Request a specific port on frps (leave empty for auto-assignment) |
 | **Subdomain** | No | Subdomain for HTTP tunnels |
-| **Node** | Yes | Target frps node (dropdown populated from the API) |
+| **Node** | Yes | Target frps node (dropdown populated from the API). If only one node exists, it is auto-selected. |
 
 Click **Create** — on success, a new entry appears in the tunnel list with `stopped` status.
 
@@ -306,6 +306,31 @@ The bottom of the detail page shows a **real-time traffic chart** (rendered with
 - **Metrics**: **KB/s In** (inbound traffic, green line) and **KB/s Out** (outbound traffic, blue line)
 - **Time range**: Shows data from the most recent minutes
 
+#### 4.5.5 Local frpc Setup
+
+Each tunnel detail page includes a **Local frpc Setup** section that shows how to run frpc on your own machine (instead of using the server-side frp manager):
+
+| Feature | Description |
+|---------|-------------|
+| **frpc command** | Exact command to run (e.g. `frpc -c my-tunnel.ini`)
+| **Config preview** | Shows the generated `frpc.ini` content with copy button |
+| **⬇ .ini download** | Downloads the config file directly |
+| **⬇ run script download** | Downloads a platform-specific run script with **auto-download of frpc** |
+
+The `run script` automatically handles frpc installation:
+- Checks if `frpc` is available locally
+- If not found, downloads the correct version (`frp 0.69.1`) from GitHub Releases
+- Detects OS (Windows/Linux/macOS) and architecture (amd64/386) from browser
+- Extracts and runs frpc with the generated config
+
+**Workflow**:
+```bash
+# 1. Go to tunnel detail page in Web Dashboard
+# 2. Click ⬇ .ini to download my-tunnel.ini
+# 3. Click ⬇ run script to download run-my-tunnel.bat (Windows) or .sh (Linux/Mac)
+# 4. Put both files in the same directory and run the script
+```
+
 ---
 
 ### 4.6 Node Management
@@ -318,13 +343,17 @@ Displays all registered frps nodes:
 
 | Column | Description |
 |--------|-------------|
-| **ID** | Node ID |
-| **Name** | Node name |
-| **Host** | Node host address |
-| **API Port** | frps admin API port |
-| **Bind Port** | frps tunnel bind port |
-| **Status** | Online status (determined by heartbeat) |
+| **Status** | Online / Offline badge (based on heartbeat within 5 min) |
+| **Name** | Node name, with scheduler score if available |
+| **Host:Port** | Node host address and bind port |
+| **Region** | Geographic region and country (e.g. `ap-east (HK)`) |
+| **Weight** | Scheduling weight (higher = more tunnels assigned) |
+| **Max Conns** | Maximum connection limit |
+| **frp Ver** | frps version |
+| **Heartbeat** | Last heartbeat timestamp |
 | **Actions** | Delete button |
+
+Top stats bar shows **Total Nodes / Online / Offline** counts.
 
 #### 4.6.2 Adding a Node
 
@@ -336,10 +365,14 @@ Displays all registered frps nodes:
 | **API Port** | No | frps admin API port (`--admin_port`) |
 | **Auth Token** | No | frps `token` authentication (if configured) |
 | **TLS** | No | Whether TLS is enabled |
-| **Region** | No | Geographic region (e.g. `us-east`, `ap-southeast`) |
-| **Country** | No | Country |
-| **City** | No | City |
-| **Lat/Lng** | No | GPS coordinates, used for geo-proximity scheduling |
+| **Scheduling** | | |
+| **Weight** | No | Scheduling weight multiplier (default `1.0`). Higher = more tunnels assigned to this node |
+| **Max Connections** | No | Capacity limit (default `100`) |
+| **Geo** | | Used for proximity-based scheduling |
+| **Region** | No | e.g. `ap-east`, `us-west` |
+| **Country** | No | e.g. `HK`, `US` |
+| **City** | No | e.g. `Hong Kong` |
+| **Latitude / Longitude** | No | GPS coordinates — scheduler prefers closer nodes |
 
 ---
 
@@ -507,41 +540,57 @@ Remove saved credentials.
 asyou logout
 ```
 
-#### `asyou expose [--n <name>] [--node <id>] <local_port>`
+#### `asyou expose [--n <name>] [--node <id>] [--remote-port <port>] <local_port>`
 
-Create a tunnel and start it in one step — the "one-click expose".
+Create a tunnel and start frpc locally in one step — the "one-click expose".
+
+> **Flags can appear anywhere** — before or after the port number, unlike traditional flag parsing.
 
 ```bash
-# Expose port 3000 with auto-generated name
+# Expose port 3000 — node is auto-selected if only one node exists
 asyou expose 3000
 
 # Expose with custom name on a specific node
 asyou expose 8080 --n my-web-app --node 2
+
+# Expose with specific remote port
+asyou expose 3000 -n my-app --remote-port 31000
+
+# List available nodes first
+asyou nodes
+# ID   Name          Host              Port
+# 1    hk-main       110.42.215.183    7001
+# 2    hk-standby    110.42.215.183    7002
+
+# Then specify a node
+asyou expose 3000 -n my-app --node 1
 ```
 
 #### `asyou list`
 
-List all tunnels with their status.
+List all tunnels with their status and remote port.
 
 ```bash
 $ asyou list
-ID   Name                 Type     Port   Status
-1    my-web-app           tcp      8080   running
-2    api-backend          tcp      4000   stopped
+ID   Name                 Type     LPort    RPort    Status
+1    my-web-app           tcp      8080     31001    running
+2    api-backend          tcp      4000     -        stopped
 ```
 
 #### `asyou delete <id>`
 
-Delete a tunnel by ID.
+Delete a tunnel by ID. Also cleans up any local frpc config file (`proxy-{id}.ini`).
 
 ```bash
 asyou delete 2
+# → [asyou] deleting tunnel #2 "api-backend" (status=stopped)
 # → Tunnel #2 deleted
+# → [asyou] cleaned up local config: C:\Users\...\asyou\proxy-2.ini
 ```
 
 #### `asyou nodes`
 
-List all registered frps nodes.
+List all registered frps nodes with their connection info.
 
 ```bash
 $ asyou nodes

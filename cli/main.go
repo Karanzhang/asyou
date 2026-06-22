@@ -48,7 +48,7 @@ func printUsage() {
 Usage:
   asyou login <email> <password>          Login to server
   asyou logout                            Clear saved credentials
-  asyou expose <local_port> [name]        Create & start a tunnel
+  asyou expose [--n <name>] [--node <id>] [--remote-port <port>] <local_port>   Create & start a tunnel (--node optional; auto-selects if omitted)
   asyou list                              List your tunnels
   asyou delete <id>                       Delete a tunnel
   asyou nodes                             List available nodes`)
@@ -113,55 +113,123 @@ func cmdLogout() {
 }
 
 func cmdExpose() {
-	fs := flag.NewFlagSet("expose", flag.ExitOnError)
-	name := fs.String("n", "", "Tunnel name (default: auto)")
-	nodeID := fs.Int("node", 0, "Node ID")
-	remotePort := fs.Int("remote-port", 0, "Remote port (optional, auto-assigned if empty)")
-	fs.Parse(os.Args[2:])
-	args := fs.Args()
-	if len(args) < 1 {
+	// Manual flag parsing — Go's flag package stops at first non-flag arg,
+	// so we parse ourselves to allow flags anywhere in the argument list.
+	rawArgs := os.Args[2:]
+	var tunnelName string
+	nodeID := 0
+	remotePort := 0
+	var positional []string
+	for i := 0; i < len(rawArgs); i++ {
+		switch rawArgs[i] {
+		case "-n":
+			if i+1 < len(rawArgs) {
+				tunnelName = rawArgs[i+1]
+				i++
+			} else {
+				fmt.Fprintln(os.Stderr, "error: -n requires a value")
+				os.Exit(1)
+			}
+		case "--node":
+			if i+1 < len(rawArgs) {
+				fmt.Sscanf(rawArgs[i+1], "%d", &nodeID)
+				i++
+			} else {
+				fmt.Fprintln(os.Stderr, "error: --node requires a value")
+				os.Exit(1)
+			}
+		case "--remote-port":
+			if i+1 < len(rawArgs) {
+				fmt.Sscanf(rawArgs[i+1], "%d", &remotePort)
+				i++
+			} else {
+				fmt.Fprintln(os.Stderr, "error: --remote-port requires a value")
+				os.Exit(1)
+			}
+		default:
+			positional = append(positional, rawArgs[i])
+		}
+	}
+	if len(positional) < 1 {
 		fmt.Fprintln(os.Stderr, "Usage: asyou expose [--n <name>] [--node <id>] [--remote-port <port>] <local_port>")
 		os.Exit(1)
 	}
+
+	fmt.Printf("[config] tunnel_name=%q node_id=%d remote_port=%d positional=%v\n", tunnelName, nodeID, remotePort, positional)
+
 	client := loadConfig()
 	if client.Token() == "" {
 		fmt.Fprintln(os.Stderr, "Not logged in. Run 'asyou login' first.")
 		os.Exit(1)
 	}
 
-	tunnelName := *name
 	if tunnelName == "" {
-		tunnelName = fmt.Sprintf("cli-tunnel-%s", args[0])
+		tunnelName = fmt.Sprintf("cli-tunnel-%s", positional[0])
 	}
 
 	port := 0
-	fmt.Sscanf(args[0], "%d", &port)
+	fmt.Sscanf(positional[0], "%d", &port)
 	if port == 0 {
-		fmt.Fprintf(os.Stderr, "invalid port: %s\n", args[0])
+		fmt.Fprintf(os.Stderr, "invalid port: %s\n", positional[0])
 		os.Exit(1)
 	}
 
-	proxy, err := client.CreateProxy(tunnelName, "tcp", port, *nodeID, *remotePort)
+	// Auto-select node if not specified
+	if nodeID == 0 {
+		nodes, err := client.ListNodes()
+		if err == nil {
+			// Filter active nodes
+			activeNodes := make([]sdk.Node, 0)
+			for _, n := range nodes {
+				activeNodes = append(activeNodes, n)
+			}
+			if len(activeNodes) == 1 {
+				nodeID = int(activeNodes[0].ID)
+				fmt.Printf("[asyou] auto-selected node #%d %q (only available node)\n", nodeID, activeNodes[0].Name)
+			} else if len(activeNodes) > 1 {
+				fmt.Fprintf(os.Stderr, "Multiple nodes available. Please specify one with --node:\n")
+				for _, n := range activeNodes {
+					fmt.Fprintf(os.Stderr, "  %d: %s (%s:%d)\n", n.ID, n.Name, n.Host, n.BindPort)
+				}
+				fmt.Fprintf(os.Stderr, "  Run 'asyou nodes' to see all nodes.\n")
+				os.Exit(1)
+			}
+		} else {
+			fmt.Printf("[asyou] warning: cannot list nodes: %v (will use server fallback)\n", err)
+		}
+	}
+
+	fmt.Printf("[asyou] creating tunnel %q (local port %d, node %d)...\n", tunnelName, port, nodeID)
+	proxy, err := client.CreateProxy(tunnelName, "tcp", port, nodeID, remotePort)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create failed: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Printf("[asyou] created proxy #%d, server returned remote_port=%v\n", proxy.ID, proxy.RemotePort)
 
 	// If server didn't assign a remote port in the create response, fetch it
 	if proxy.RemotePort == nil || *proxy.RemotePort == 0 {
+		fmt.Printf("[asyou] remote port not assigned yet, re-fetching proxy #%d...\n", proxy.ID)
 		if fetched, err := client.GetProxy(proxy.ID); err == nil && fetched.RemotePort != nil && *fetched.RemotePort > 0 {
 			proxy = fetched
+			fmt.Printf("[asyou] fetched proxy #%d, remote_port=%d\n", proxy.ID, *proxy.RemotePort)
+		} else if err != nil {
+			fmt.Printf("[asyou] warning: failed to re-fetch proxy: %v\n", err)
+		} else {
+			fmt.Printf("[asyou] warning: remote port still unassigned after re-fetch\n")
 		}
 	}
 
 	// Get node info for frpc config
 	var frpsHost string
 	var frpsPort int
-	if *nodeID > 0 {
-		node, err := client.GetNode(int64(*nodeID))
+	if nodeID > 0 {
+		fmt.Printf("[asyou] fetching node #%d info...\n", nodeID)
+		node, err := client.GetNode(int64(nodeID))
 		if err == nil {
 			frpsHost = node.Host
 			frpsPort = node.BindPort
+			fmt.Printf("[asyou] node #%d: host=%s bind_port=%d\n", nodeID, frpsHost, frpsPort)
 		} else {
 			fmt.Fprintf(os.Stderr, "warning: cannot get node info: %v\n", err)
 		}
@@ -181,6 +249,7 @@ func cmdExpose() {
 			frpsHost = frpsHost[:idx]
 		}
 		frpsPort = 7000
+		fmt.Printf("[asyou] using fallback frps: %s:%d\n", frpsHost, frpsPort)
 	}
 	if frpsPort == 0 {
 		frpsPort = 7000
@@ -201,12 +270,12 @@ local_ip = 127.0.0.1
 local_port = %d
 `, frpsHost, frpsPort, tunnelName, port)
 	// Add remote_port if specified by user or assigned by server
-	rp := *remotePort
-	if rp > 0 {
-		iniContent += fmt.Sprintf("remote_port = %d\n", rp)
+	if remotePort > 0 {
+		iniContent += fmt.Sprintf("remote_port = %d\n", remotePort)
 	} else if proxy.RemotePort != nil && *proxy.RemotePort > 0 {
 		iniContent += fmt.Sprintf("remote_port = %d\n", *proxy.RemotePort)
 	}
+	fmt.Printf("[asyou] generated frpc config:\n%s\n", iniContent)
 	if err := os.WriteFile(cfgPath, []byte(iniContent), 0600); err != nil {
 		fmt.Fprintf(os.Stderr, "write config failed: %v\n", err)
 		os.Exit(1)
@@ -282,9 +351,13 @@ func cmdList() {
 		fmt.Println("No tunnels.")
 		return
 	}
-	fmt.Printf("%-4s %-20s %-8s %-6s %s\n", "ID", "Name", "Type", "Port", "Status")
+	fmt.Printf("%-4s %-20s %-8s %-8s %-8s %s\n", "ID", "Name", "Type", "LPort", "RPort", "Status")
 	for _, p := range proxies {
-		fmt.Printf("%-4d %-20s %-8s %-6d %s\n", p.ID, p.Name, p.Type, p.LocalPort, p.Status)
+		rp := "-"
+		if p.RemotePort != nil && *p.RemotePort > 0 {
+			rp = fmt.Sprintf("%d", *p.RemotePort)
+		}
+		fmt.Printf("%-4d %-20s %-8s %-8d %-8s %s\n", p.ID, p.Name, p.Type, p.LocalPort, rp, p.Status)
 	}
 }
 
@@ -304,11 +377,27 @@ func cmdDelete() {
 		fmt.Fprintf(os.Stderr, "invalid id: %s\n", os.Args[2])
 		os.Exit(1)
 	}
+
+	// Fetch proxy info before deleting (for logging)
+	if proxy, err := client.GetProxy(id); err == nil {
+		fmt.Printf("[asyou] deleting tunnel #%d %q (status=%s)\n", id, proxy.Name, proxy.Status)
+	} else {
+		fmt.Printf("[asyou] deleting tunnel #%d\n", id)
+	}
+
 	if err := client.DeleteProxy(id); err != nil {
 		fmt.Fprintf(os.Stderr, "delete failed: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("Tunnel #%d deleted\n", id)
+
+	// Clean up local config file if present
+	cfgDir, _ := os.UserConfigDir()
+	cfgPath := filepath.Join(cfgDir, "asyou", fmt.Sprintf("proxy-%d.ini", id))
+	if _, err := os.Stat(cfgPath); err == nil {
+		os.Remove(cfgPath)
+		fmt.Printf("[asyou] cleaned up local config: %s\n", cfgPath)
+	}
 }
 
 func cmdNodes() {

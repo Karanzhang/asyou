@@ -114,7 +114,11 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
         if req.RemotePort != nil {
             remotePortVal = *req.RemotePort
         } else if req.NodeID != nil {
-            remotePortVal = 31000
+            startPort := s.ProxyStartPort
+            if startPort == 0 {
+                startPort = 31000
+            }
+            remotePortVal = startPort
         }
         res, err := s.DB.Exec(`INSERT INTO proxies (user_id, node_id, name, type, local_ip, local_port, remote_port, subdomain, custom_domains, enable_tls, status, annotations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, mustGetUserID(r), nodeID, req.Name, req.Type, localIP, req.LocalPort, remotePortVal, req.Subdomain, cdoms, 0, "stopped", "")
         if err != nil {

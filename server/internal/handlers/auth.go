@@ -26,6 +26,9 @@ type Server struct {
 	FRP       *frp.Manager
 	SSE       *SSEHub
 	ACME      *ACMEConfig
+	// ProxyStartPort is the first port in the range auto-assigned to proxies.
+	// Must match the allow_ports range in frps config (default: 31000).
+	ProxyStartPort int
 }
 
 type registerRequest struct {

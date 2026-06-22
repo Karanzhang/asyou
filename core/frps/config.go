@@ -12,6 +12,11 @@ type Config struct {
 	BindUDPPort int
 	KCPBindPort int
 	Token       string
+	// Port restrictions
+	AllowPorts string // e.g. "31000-31999" or "2000-3000,4000-5000"
+	// HTTP/HTTPS virtual host ports (for http/https proxy types)
+	VhostHTTPPort  int
+	VhostHTTPSPort int
 	// Admin API
 	AdminAddr string
 	AdminPort int
@@ -25,8 +30,8 @@ type Config struct {
 	DashboardUser string
 	DashboardPwd  string
 	// Logging
-	LogFile  string
-	LogLevel string
+	LogFile    string
+	LogLevel   string
 	LogMaxDays int
 }
 
@@ -41,6 +46,15 @@ func BuildINI(cfg *Config) string {
 	}
 	if cfg.KCPBindPort > 0 {
 		b.WriteString(fmt.Sprintf("kcp_bind_port = %d\n", cfg.KCPBindPort))
+	}
+	if cfg.AllowPorts != "" {
+		b.WriteString(fmt.Sprintf("allow_ports = %s\n", cfg.AllowPorts))
+	}
+	if cfg.VhostHTTPPort > 0 {
+		b.WriteString(fmt.Sprintf("vhost_http_port = %d\n", cfg.VhostHTTPPort))
+	}
+	if cfg.VhostHTTPSPort > 0 {
+		b.WriteString(fmt.Sprintf("vhost_https_port = %d\n", cfg.VhostHTTPSPort))
 	}
 	if cfg.Token != "" {
 		b.WriteString(fmt.Sprintf("token = %s\n", cfg.Token))
@@ -85,10 +99,12 @@ func BuildINI(cfg *Config) string {
 // DefaultConfig returns a sensible default frps configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		BindAddr:    "0.0.0.0",
-		BindPort:    7000,
-		AdminAddr:   "127.0.0.1",
-		AdminPort:   7500,
-		LogLevel:    "info",
+		BindAddr:      "0.0.0.0",
+		BindPort:      7000,
+		AllowPorts:    "31000-31999",
+		VhostHTTPPort: 80,
+		AdminAddr:     "127.0.0.1",
+		AdminPort:     7500,
+		LogLevel:      "info",
 	}
 }

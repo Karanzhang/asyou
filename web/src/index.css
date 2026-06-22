@@ -231,3 +231,18 @@ tr:hover td { background: var(--bg-hover); }
 
 /* Action buttons group */
 .actions { display: flex; gap: 0.4rem; }
+
+/* Code block for frpc config */
+.code-block {
+  background: #0a0b10;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+  user-select: all;
+  cursor: text;
+}

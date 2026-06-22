@@ -15,6 +15,16 @@ export interface Node {
   bind_port: number
   tls_enabled: boolean
   auth_token?: string
+  frp_version?: string
+  region?: string
+  country?: string
+  city?: string
+  latitude?: number
+  longitude?: number
+  max_connections?: number
+  weight?: number
+  is_active?: boolean
+  score?: number
   last_heartbeat: string
   created_at: string
   updated_at: string

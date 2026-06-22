@@ -16,11 +16,15 @@ import (
 
 func main() {
 	cwd, _ := os.Getwd()
-	// Try local paths first (systemd: /var/lib/asyou/),
-	// fall back to parent paths (dev: server/../)
 	migrationsDir := filepath.Join(cwd, "migrations")
+	// Try executable-relative path as fallback (for systemd: /var/lib/asyou/)
 	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
-		migrationsDir = filepath.Join(cwd, "..", "migrations")
+		if exe, err := os.Executable(); err == nil {
+			alt := filepath.Join(filepath.Dir(exe), "..", "migrations")
+			if _, err := os.Stat(alt); err == nil {
+				migrationsDir = alt
+			}
+		}
 	}
 	dbPath := filepath.Join(cwd, "asyou.db")
 	log.Printf("migrations dir: %s", migrationsDir)
@@ -36,7 +40,7 @@ func main() {
 	frpManager := frp.NewManager()
 	sseHub := handlers.NewSSEHub()
 	acmeCfg := handlers.DefaultACMEConfig()
-	s := &handlers.Server{DB: dbConn, FRP: frpManager, SSE: sseHub, ACME: acmeCfg}
+	s := &handlers.Server{DB: dbConn, FRP: frpManager, SSE: sseHub, ACME: acmeCfg, ProxyStartPort: 31000}
 
 	// Start periodic stats broadcaster (every 10s)
 	s.StartStatsBroadcaster(10 * time.Second)

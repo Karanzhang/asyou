@@ -2,7 +2,9 @@
 
 [![Go](https://img.shields.io/badge/Go-1.20+-00ADD8?logo=go)](https://go.dev)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)](https://react.dev)
-[![License](https://img.shields.io/badge/License-MIT-green)](#license)
+[![Vite](https://img.shields.io/badge/Vite-4-646CFF?logo=vite)](https://vitejs.dev)
+[![Wails](https://img.shields.io/badge/Wails-2-FF3E00?logo=wails)](https://wails.io)
+[![frp](https://img.shields.io/badge/frp-0.69.1-0099FF?logo=github)](
 
 **asyou** is a self-hosted tunnel management platform built on [frp](https://github.com/fatedier/frp). It allows you to expose local services (web apps, APIs, databases) to the internet through secure tunnels, with a comprehensive management layer for authentication, monitoring, and multi-node orchestration.
 
@@ -90,7 +92,7 @@ asyou/
 ├── server/           # Management server (Go)
 │   ├── cmd/          # Entry point
 │   ├── internal/     # Handlers, middleware, models, frp manager
-│   └── migrations/   # SQLite schema
+│   └── server/migrations/   # SQLite schema
 ├── web/              # React Dashboard (Vite + TypeScript)
 │   └── src/
 │       ├── api/      # REST client
@@ -185,7 +187,7 @@ const proxy = await client.expose(3000, 'my-app')
 
 ## 📄 License
 
-- **Own modules** (server, web, cli, sdk, desktop, docs, core): [Apache-2.0](./LICENSE)
+- **Own modules** (server, web, cli, sdk, desktop, docs, core): Apache-2.0
 - **frp components** (derived from [fatedier/frp](https://github.com/fatedier/frp)): Apache-2.0
 
 See the `LICENSE` file for details.
