@@ -242,6 +242,12 @@ local_port = %d
 	fmt.Printf("Tunnel #%d '%s' created. Starting frpc locally...\n", proxy.ID, proxy.Name)
 	fmt.Printf("Config: %s\n", cfgPath)
 	fmt.Printf("frpc:  %s\n", frpcPath)
+	fmt.Printf("\nRemote port will be shown in frps dashboard:\n")
+	fmt.Printf("  http://%s:7500 (user: admin / password in frps config)\n", frpsHost)
+	fmt.Printf("Or check: curl -s http://admin:admin%%40hf@%s:7500/api/proxy/tcp\n", frpsHost)
+	fmt.Printf("\nIf you specified --remote-port, access at:\n")
+	fmt.Printf("  http://%s:%d\n", frpsHost, *remotePort)
+	fmt.Println("")
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "frpc exited: %v\n", err)
 		os.Exit(1)
