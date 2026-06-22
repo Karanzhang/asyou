@@ -54,7 +54,7 @@ asyou/
 ├── cli/                     # CLI tool
 ├── sdk/                     # Multi-language SDKs
 ├── api/                     # OpenAPI specification
-├── server/migrations/       # Database migrations
+├── server/internal/db/migrations/   # Database migrations (embedded)
 ├── docs/                    # Documentation
 ├── deploy/                  # Docker/K8s configs
 └── README.md

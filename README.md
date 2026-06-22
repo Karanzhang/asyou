@@ -102,7 +102,7 @@ asyou/
 ├── server/           # Management server (Go)
 │   ├── cmd/          # Entry point
 │   ├── internal/     # Handlers, middleware, models, frp manager
-│   └── migrations/   # SQLite schema
+│   └── internal/db/migrations/   # SQLite schema (embedded)
 ├── web/              # React Dashboard (Vite + TypeScript) — see web/README.md
 │   └── src/
 │       ├── api/      # REST client

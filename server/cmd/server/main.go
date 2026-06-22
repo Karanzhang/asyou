@@ -16,24 +16,14 @@ import (
 
 func main() {
 	cwd, _ := os.Getwd()
-	migrationsDir := filepath.Join(cwd, "migrations")
-	// Try executable-relative path as fallback (for systemd: /var/lib/asyou/)
-	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
-		if exe, err := os.Executable(); err == nil {
-			alt := filepath.Join(filepath.Dir(exe), "..", "migrations")
-			if _, err := os.Stat(alt); err == nil {
-				migrationsDir = alt
-			}
-		}
-	}
 	dbPath := filepath.Join(cwd, "asyou.db")
-	log.Printf("migrations dir: %s", migrationsDir)
 	dbConn, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		log.Fatalf("open db: %v", err)
 	}
 	defer dbConn.Close()
-	if err := db.RunMigrations(dbConn, migrationsDir); err != nil {
+	// Migrations are embedded in the binary via //go:embed
+	if err := db.RunMigrations(dbConn, ""); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
 

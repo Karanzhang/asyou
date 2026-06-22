@@ -2,41 +2,38 @@ package db
 
 import (
 	"database/sql"
+	"embed"
 	"fmt"
-	"io/ioutil"
+	"io/fs"
 	"path/filepath"
 	"sort"
 	"strings"
 )
 
-// migrationMeta stores applied migration versions.
-type migrationMeta struct {
-	Version int
-	Dirty   bool
-}
+//go:embed migrations/*.sql
+var migrationFS embed.FS
 
-// RunMigrations executes SQL files in the migrations directory against db.
+// RunMigrations executes embedded SQL migration files against db.
 // Each file is run only once; already-applied files are skipped.
-func RunMigrations(db *sql.DB, migrationsDir string) error {
+func RunMigrations(db *sql.DB, _ string) error {
 	// Ensure meta table exists
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, dirty INTEGER DEFAULT 0)`); err != nil {
 		return fmt.Errorf("create meta table: %w", err)
 	}
 
-	files, err := filepath.Glob(filepath.Join(migrationsDir, "*.sql"))
+	entries, err := fs.Glob(migrationFS, "migrations/*.sql")
 	if err != nil {
 		return err
 	}
-	if len(files) == 0 {
+	if len(entries) == 0 {
 		return nil
 	}
-	sort.Strings(files)
+	sort.Strings(entries)
 
-	for _, f := range files {
+	for _, name := range entries {
 		// Extract version number from filename (e.g. 0001_init.sql → 1)
-		base := filepath.Base(f)
 		version := 0
-		fmt.Sscanf(base, "%d", &version)
+		fmt.Sscanf(name, "%d", &version)
 
 		// Check if already applied
 		var count int
@@ -45,9 +42,9 @@ func RunMigrations(db *sql.DB, migrationsDir string) error {
 			continue
 		}
 
-		b, err := ioutil.ReadFile(f)
+		b, err := migrationFS.ReadFile(filepath.Join("migrations", name))
 		if err != nil {
-			return err
+			return fmt.Errorf("read %s: %w", name, err)
 		}
 		sqls := strings.TrimSpace(string(b))
 		if sqls == "" {
@@ -58,11 +55,11 @@ func RunMigrations(db *sql.DB, migrationsDir string) error {
 			if strings.Contains(err.Error(), "duplicate column name") {
 				continue
 			}
-			return fmt.Errorf("exec %s: %w", f, err)
+			return fmt.Errorf("exec %s: %w", name, err)
 		}
 		// Mark as applied
 		if _, err := db.Exec("INSERT OR REPLACE INTO schema_migrations (version, dirty) VALUES (?, 0)", version); err != nil {
-			return fmt.Errorf("record migration %s: %w", f, err)
+			return fmt.Errorf("record migration %s: %w", name, err)
 		}
 	}
 	return nil
