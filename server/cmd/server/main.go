@@ -63,6 +63,8 @@ func main() {
 	// certificates (protected)
 	http.HandleFunc("/api/v1/certs", s.AuthMiddleware(s.CertsListHandler))
 	http.HandleFunc("/api/v1/certs/", s.AuthMiddleware(s.CertsItemHandler))
+	// AI assistant (protected)
+	http.HandleFunc("/api/v1/ai/query", s.AuthMiddleware(s.AiQueryHandler))
 
 	log.Println("starting server :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))

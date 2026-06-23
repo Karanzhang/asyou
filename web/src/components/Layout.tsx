@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import type { User } from '../types'
+import AiChat from './AiChat'
 
 interface Props {
   user: User | null
@@ -25,6 +26,9 @@ export default function Layout({ user, onLogout, children }: Props) {
           <NavLink to="/api-keys" className={({ isActive }) => isActive ? 'active' : ''}>
             🔑 API Keys
           </NavLink>
+          <NavLink to="/docs" className={({ isActive }) => isActive ? 'active' : ''}>
+            📖 Docs
+          </NavLink>
         </nav>
         <div style={{ padding: '0 1.5rem', marginTop: 'auto', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
           {user?.email}
@@ -32,6 +36,7 @@ export default function Layout({ user, onLogout, children }: Props) {
         <button className="logout-btn" onClick={onLogout}>Sign Out</button>
       </aside>
       <main className="main">{children}</main>
+      <AiChat />
     </div>
   )
 }

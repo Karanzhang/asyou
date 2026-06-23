@@ -7,6 +7,7 @@ import ProxyDetail from './components/ProxyDetail'
 import NodeList from './components/NodeList'
 import AuditLogs from './components/AuditLogs'
 import ApiKeys from './components/ApiKeys'
+import Docs from './components/Docs'
 
 export default function App() {
   const auth = useAuth()
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/nodes" element={<NodeList />} />
         <Route path="/audit-logs" element={<AuditLogs />} />
         <Route path="/api-keys" element={<ApiKeys />} />
+        <Route path="/docs" element={<Docs />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
