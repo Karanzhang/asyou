@@ -51,6 +51,7 @@ func printUsage() {
 
 Usage:
   asyou login <email> <password>          Login to server
+  asyou login --api-key <key>             Login with API key
   asyou logout                            Clear saved credentials
   asyou expose [--n <name>] [--type <tcp|http|https|udp>] [--subdomain <name>] [--node <id>] [--remote-port <port>] <local_port>   Create & start a tunnel
   asyou list                              List your tunnels
@@ -75,13 +76,18 @@ func loadConfig() *sdk.Client {
 	var cred struct {
 		ServerURL string `json:"server_url"`
 		Token     string `json:"token"`
+		UseAPIKey bool   `json:"use_api_key"`
 	}
 	json.Unmarshal(data, &cred)
 	if cred.ServerURL != "" {
 		cfg = sdk.NewClient(cred.ServerURL)
 	}
 	if cred.Token != "" {
-		cfg.SetToken(cred.Token)
+		if cred.UseAPIKey {
+			cfg.SetAPIKey(cred.Token)
+		} else {
+			cfg.SetToken(cred.Token)
+		}
 	}
 	return cfg
 }
@@ -89,9 +95,10 @@ func loadConfig() *sdk.Client {
 func saveConfig(c *sdk.Client) {
 	path := configPath()
 	os.MkdirAll(filepath.Dir(path), 0755)
-	data, _ := json.Marshal(map[string]string{
-		"server_url": c.BaseURL,
-		"token":      c.Token(),
+	data, _ := json.Marshal(map[string]interface{}{
+		"server_url":  c.BaseURL,
+		"token":       c.Token(),
+		"use_api_key": c.IsAPIKey(),
 	})
 	os.WriteFile(path, data, 0600)
 }
@@ -99,13 +106,28 @@ func saveConfig(c *sdk.Client) {
 func cmdLogin() {
 	fs := flag.NewFlagSet("login", flag.ExitOnError)
 	server := fs.String("s", "http://localhost:8080", "Server URL")
+	apiKey := fs.String("api-key", "", "Use API key instead of email/password")
 	fs.Parse(os.Args[2:])
 	args := fs.Args()
+
+	client := sdk.NewClient(*server)
+
+	if *apiKey != "" {
+		client.SetAPIKey(*apiKey)
+		// Verify the API key works by calling getMe
+		if _, err := client.GetMe(); err != nil {
+			fmt.Fprintf(os.Stderr, "api key verification failed: %v\n", err)
+			os.Exit(1)
+		}
+		saveConfig(client)
+		fmt.Println("Logged in with API key")
+		return
+	}
+
 	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: asyou login [--s <url>] <email> <password>")
+		fmt.Fprintln(os.Stderr, "Usage: asyou login [--s <url>] [--api-key <key>] <email> <password>")
 		os.Exit(1)
 	}
-	client := sdk.NewClient(*server)
 	if err := client.Login(args[0], args[1]); err != nil {
 		fmt.Fprintf(os.Stderr, "login failed: %v\n", err)
 		os.Exit(1)

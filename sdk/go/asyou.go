@@ -12,9 +12,30 @@ import (
 
 // Client is the asyou API client.
 type Client struct {
-	BaseURL   string
+	BaseURL    string
 	httpClient *http.Client
-	token     string
+	token      string
+	useAPIKey  bool
+}
+
+// SetToken sets the auth token (JWT Bearer).
+func (c *Client) SetToken(t string) { c.token = t; c.useAPIKey = false }
+
+// Token returns the current auth token.
+func (c *Client) Token() string { return c.token }
+
+// SetAPIKey sets an API key for X-Api-Key header auth.
+func (c *Client) SetAPIKey(k string) { c.token = k; c.useAPIKey = true }
+
+// IsAPIKey returns true if using API key auth.
+func (c *Client) IsAPIKey() bool { return c.useAPIKey }
+
+// User represents an asyou platform user.
+type User struct {
+	ID          int64  `json:"id"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	Role        string `json:"role"`
 }
 
 // Proxy represents a tunnel.
@@ -47,12 +68,6 @@ func NewClient(serverURL string) *Client {
 	}
 }
 
-// SetToken sets the auth token.
-func (c *Client) SetToken(t string) { c.token = t }
-
-// Token returns the current auth token.
-func (c *Client) Token() string { return c.token }
-
 func (c *Client) do(method, path string, body, result interface{}) error {
 	var r io.Reader
 	if body != nil {
@@ -68,7 +83,11 @@ func (c *Client) do(method, path string, body, result interface{}) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
+		if c.useAPIKey {
+			req.Header.Set("X-Api-Key", c.token)
+		} else {
+			req.Header.Set("Authorization", "Bearer "+c.token)
+		}
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -106,6 +125,7 @@ func (c *Client) Login(email, password string) error {
 		return err
 	}
 	c.token = res.AccessToken
+	c.useAPIKey = false
 	return nil
 }
 
@@ -120,7 +140,6 @@ func (c *Client) Register(email, password, displayName string) error {
 }
 
 // ForgotPassword sends a password reset email for the given address.
-// The server SMTP configuration must be set up.
 func (c *Client) ForgotPassword(email string) error {
 	var res struct {
 		Message string `json:"message"`
@@ -138,6 +157,15 @@ func (c *Client) ResetPassword(token, newPassword string) error {
 	return c.do("POST", "/api/v1/auth/reset-password", map[string]string{
 		"token": token, "password": newPassword,
 	}, &res)
+}
+
+// GetMe returns the currently authenticated user.
+func (c *Client) GetMe() (*User, error) {
+	var u User
+	if err := c.do("GET", "/api/v1/users/me", nil, &u); err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 // ListProxies returns all tunnels for the authenticated user.
