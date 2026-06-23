@@ -610,6 +610,9 @@ asyou --help
 # Login to the public asyou server
 asyou login --s https://asyou.example.com admin@example.com your-password
 
+# Or login with an API key (create one from Web Dashboard → API Keys)
+# asyou login --s https://asyou.example.com --api-key asyou_xxxxxxxx
+
 # Verify login
 asyou list
 # → Shows the tunnel list on the server (empty initially)

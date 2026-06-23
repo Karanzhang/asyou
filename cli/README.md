@@ -10,10 +10,25 @@ cd cli && go build -o /usr/local/bin/asyou .
 
 ## Usage
 
+### Login Methods
+
+**Method 1 — Email & Password**
 ```bash
 # Login to server (default: http://localhost:8080)
 asyou login admin@example.com mypassword
 # → Logged in as admin@example.com
+```
+
+**Method 2 — API Key**
+```bash
+# Create an API key from the Web Dashboard (API Keys page), then:
+asyou login --api-key asyou_xxxxxxxxxxxx
+# → Logged in with API key
+```
+
+### Tunnel Management
+
+```bash
 
 # List tunnels
 asyou list
@@ -58,7 +73,8 @@ asyou logout
 
 | Command | Description |
 |---|---|
-| `login [--s <url>] <email> <password>` | Login and save credentials |
+| `login [--s <url>] <email> <password>` | Login with email & password |
+| `login --api-key <key>` | Login with API key |
 | `logout` | Clear saved session |
 | `expose [--n <name>] [--type <tcp\|http\|https\|udp>] [--subdomain <name>] [--node <id>] [--remote-port <port>] <port>` | Create + start a tunnel |
 | `list` | List all tunnels |
