@@ -86,10 +86,14 @@ export default function ProxyDetail() {
   const frpsPort = proxy.node_id
     ? nodes.find(n => n.id === proxy.node_id)?.bind_port || 7000
     : 7000
+  const frpsToken = proxy.node_id
+    ? nodes.find(n => n.id === proxy.node_id)?.auth_token || ''
+    : ''
   const sectionName = proxy.name
   const frpcINI = `[common]
 server_addr = ${frpsHost}
 server_port = ${frpsPort}
+${frpsToken ? `token = ${frpsToken}` : ''}
 
 [${sectionName}]
 type = ${proxy.type}

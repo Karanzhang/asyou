@@ -58,6 +58,7 @@ type Node struct {
 	Name     string `json:"name"`
 	Host     string `json:"host"`
 	BindPort int    `json:"bind_port"`
+	AuthToken string `json:"auth_token,omitempty"`
 }
 
 // NewClient creates a new SDK client pointing at the given server URL.

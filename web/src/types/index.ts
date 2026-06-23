@@ -15,6 +15,7 @@ export interface Node {
   bind_port: number
   tls_enabled: boolean
   auth_token?: string
+  dashboard_port?: number
   frp_version?: string
   region?: string
   country?: string

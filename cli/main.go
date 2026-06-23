@@ -277,6 +277,10 @@ func cmdExpose() {
 			frpsHost = node.Host
 			frpsPort = node.BindPort
 			fmt.Printf("[asyou] node #%d: host=%s bind_port=%d\n", nodeID, frpsHost, frpsPort)
+			// Also fetch auth_token for frpc config
+			if node.AuthToken != "" {
+				fmt.Printf("[asyou] node #%d has auth_token configured\n", nodeID)
+			}
 		} else {
 			fmt.Fprintf(os.Stderr, "warning: cannot get node info: %v\n", err)
 		}
@@ -302,6 +306,14 @@ func cmdExpose() {
 		frpsPort = 7000
 	}
 
+	// Build token line for frpc config
+	tokenLine := ""
+	if nodeID > 0 {
+		if node, err := client.GetNode(int64(nodeID)); err == nil && node.AuthToken != "" {
+			tokenLine = fmt.Sprintf("token = %s", node.AuthToken)
+		}
+	}
+
 	// Generate frpc config and run locally
 	cfgDir, _ := os.UserConfigDir()
 	cfgPath := filepath.Join(cfgDir, "asyou", fmt.Sprintf("proxy-%d.ini", proxy.ID))
@@ -310,12 +322,12 @@ func cmdExpose() {
 	iniContent := fmt.Sprintf(`[common]
 server_addr = %s
 server_port = %d
-
+%s
 [%s]
 type = %s
 local_ip = 127.0.0.1
 local_port = %d
-`, frpsHost, frpsPort, tunnelName, tunnelType, port)
+`, frpsHost, frpsPort, tokenLine, tunnelName, tunnelType, port)
 	// Add subdomain for http/https types
 	if subdomain != "" && (tunnelType == "http" || tunnelType == "https") {
 		iniContent += fmt.Sprintf("subdomain = %s\n", subdomain)
