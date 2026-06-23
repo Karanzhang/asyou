@@ -410,8 +410,57 @@ cd web && npm run build
 - 使用该密钥的 API 请求将收到 `401 Unauthorized`
 - 列表中状态标记为 `Revoked: Yes`
 
-> **API Key 用途**：用于 CLI 和 SDK 的无交互认证。  
-> 参见 [5. CLI 参考](#5-cli-参考) 和 [8. SDK 快速入门](#8-sdk-快速入门)。
+#### 4.7.4 使用 API Key
+
+API Key 是 JWT 认证的替代方案，适用于程序化访问（脚本、CI/CD、SDK）。
+
+**认证方式**：通过 `X-Api-Key` 请求头发送：
+
+```bash
+# 代替 Authorization: Bearer <jwt>
+curl -H "X-Api-Key: asyou_abc123..." http://localhost:8080/api/v1/proxies
+```
+
+**与 CLI 配合使用**：直接将 API Key 写入配置文件：
+
+```bash
+cat > ~/.config/asyou/cli-config.json << 'EOF'
+{
+  "server_url": "http://110.42.215.183:8080",
+  "token": "asyou_abc123..."
+}
+EOF
+# 之后 CLI 命令无需登录即可使用
+asyou list
+```
+
+**与 SDK 配合使用**：
+
+```python
+# Python
+from asyou import Client
+c = Client("http://localhost:8080")
+c.set_api_key("asyou_abc123...")
+proxies = c.list_proxies()
+```
+
+```go
+// Go
+c := asyou.NewClient("http://localhost:8080")
+c.SetToken("asyou_abc123...")
+proxies, _ := c.ListProxies()
+```
+
+```typescript
+// Node.js
+import { AsyouClient } from 'asyou-sdk'
+const client = new AsyouClient('http://localhost:8080')
+client.setToken('asyou_abc123...')
+const proxies = await client.listProxies()
+```
+
+> **注意**：API Key 永不过期，但可随时从仪表盘吊销。  
+> 请像对待密码一样妥善保管，建议使用环境变量或密钥管理服务。
 
 ---
 

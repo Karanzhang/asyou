@@ -409,8 +409,57 @@ If a key is compromised or no longer needed, click **Revoke**. After revocation:
 - API requests using this key receive `401 Unauthorized`
 - The list shows `Revoked: Yes`
 
-> **API Key usage**: Used for non-interactive authentication with CLI and SDK.  
-> See [5. CLI Reference](#5-cli-reference) and [8. SDK Quickstart](#8-sdk-quickstart).
+#### 4.7.4 Using API Keys
+
+API Keys are an alternative to JWT authentication, designed for programmatic access (scripts, CI/CD, SDKs).
+
+**Authentication**: Send the key in the `X-Api-Key` header:
+
+```bash
+# Instead of Authorization: Bearer <jwt>
+curl -H "X-Api-Key: asyou_abc123..." http://localhost:8080/api/v1/proxies
+```
+
+**With asyou CLI**: API Keys can be used by writing them directly to the config file:
+
+```bash
+cat > ~/.config/asyou/cli-config.json << 'EOF'
+{
+  "server_url": "http://110.42.215.183:8080",
+  "token": "asyou_abc123..."
+}
+EOF
+# Now all CLI commands work without login
+asyou list
+```
+
+**With SDK**:
+
+```python
+# Python
+from asyou import Client
+c = Client("http://localhost:8080")
+c.set_api_key("asyou_abc123...")
+proxies = c.list_proxies()
+```
+
+```go
+// Go
+c := asyou.NewClient("http://localhost:8080")
+c.SetToken("asyou_abc123...")
+proxies, _ := c.ListProxies()
+```
+
+```typescript
+// Node.js
+import { AsyouClient } from 'asyou-sdk'
+const client = new AsyouClient('http://localhost:8080')
+client.setToken('asyou_abc123...')
+const proxies = await client.listProxies()
+```
+
+> **Note**: API Keys never expire, but can be revoked at any time from the dashboard.  
+> Treat them like passwords — store them in environment variables or secret managers, not in code.
 
 ---
 
