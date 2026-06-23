@@ -28,9 +28,12 @@ export default function AiChat({ apiBase }: { apiBase?: string }) {
     setBusy(true)
     try {
       const base = apiBase || ''
+      const token = localStorage.getItem('asyou_token')
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
       const res = await fetch(`${base}/api/v1/ai/query`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ message: q }),
       })
       if (!res.ok) throw new Error('HTTP ' + res.status)
