@@ -1,7 +1,17 @@
+import { useState } from 'react'
+import DocsZh from './DocsZh'
+
 export default function Docs() {
+  const [lang, setLang] = useState<'en' | 'zh'>('en')
+
+  if (lang === 'zh') return <DocsZh onSwitch={() => setLang('en')} />
+
   return (
     <div className="docs">
-      <h1>asyou User Guide</h1>
+      <div className="docs-header">
+        <h1>asyou User Guide</h1>
+        <button className="btn btn-sm" onClick={() => setLang('zh')}>中文</button>
+      </div>
       <p className="docs-subtitle">Tunnel management platform built on frp</p>
 
       <section>

@@ -249,6 +249,9 @@ tr:hover td { background: var(--bg-hover); }
 
 /* Docs page */
 .docs { max-width: 800px; }
+.docs-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.25rem; }
+.docs-header h1 { font-size: 1.8rem; margin: 0; }
+.docs-header button { margin-top: 0.2rem; }
 .docs h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
 .docs-subtitle { color: var(--text-muted); margin-bottom: 2rem; font-size: 0.95rem; }
 .docs section { margin-bottom: 2rem; }
