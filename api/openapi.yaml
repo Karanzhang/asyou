@@ -37,6 +37,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TokenResponse'
+  /auth/forgot-password:
+    post:
+      summary: Request password reset email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '200':
+          description: always returns success (prevents email enumeration)
+  /auth/reset-password:
+    post:
+      summary: Reset password with token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: password updated
   /users/me:
     get:
       summary: Get current user
@@ -158,6 +182,25 @@ paths:
       responses:
         '204':
           description: accepted
+  /nodes/{id}/status:
+    get:
+      summary: Get live node status from frps admin API
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: live node status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeStatusResponse'
   /nodes/{id}/proxies/{proxy_id}/stats:
     post:
       summary: Ingest proxy stats (auth by node token header)
@@ -405,6 +448,25 @@ paths:
           description: metrics
           content:
             text/plain: {}
+  /ai/query:
+    post:
+      summary: Ask the AI assistant a question
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiQueryRequest'
+      responses:
+        '200':
+          description: answer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiQueryResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -446,6 +508,32 @@ components:
         token_type:
           type: string
           default: bearer
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    ResetPasswordRequest:
+      type: object
+      required: [token, password]
+      properties:
+        token:
+          type: string
+        password:
+          type: string
+    AiQueryRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+    AiQueryResponse:
+      type: object
+      properties:
+        answer:
+          type: string
     User:
       type: object
       properties:
@@ -473,6 +561,35 @@ components:
           type: boolean
         auth_token:
           type: string
+        dashboard_port:
+          type: integer
+        dashboard_user:
+          type: string
+        dashboard_pwd:
+          type: string
+        port_range_start:
+          type: integer
+        port_range_end:
+          type: integer
+        subdomain_host:
+          type: string
+        region:
+          type: string
+        country:
+          type: string
+        city:
+          type: string
+        latitude:
+          type: number
+          format: float
+        longitude:
+          type: number
+          format: float
+        max_connections:
+          type: integer
+        weight:
+          type: number
+          format: float
     NodeUpdate:
       type: object
       properties:
@@ -488,6 +605,14 @@ components:
           type: boolean
         auth_token:
           type: string
+        dashboard_port:
+          type: integer
+        dashboard_user:
+          type: string
+        dashboard_pwd:
+          type: string
+        subdomain_host:
+          type: string
     Node:
       allOf:
         - $ref: '#/components/schemas/NodeCreate'
@@ -495,9 +620,60 @@ components:
           properties:
             id:
               type: integer
+            frp_version:
+              type: string
+            is_active:
+              type: boolean
             last_heartbeat:
               type: string
               format: date-time
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+    NodeStatusResponse:
+      type: object
+      properties:
+        node_id:
+          type: integer
+        node_name:
+          type: string
+        server_info:
+          type: object
+          properties:
+            version:
+              type: string
+            bindPort:
+              type: integer
+            totalTrafficIn:
+              type: integer
+            totalTrafficOut:
+              type: integer
+            curConns:
+              type: integer
+            clientCounts:
+              type: integer
+        proxies:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+              status:
+                type: string
+              clientID:
+                type: string
+              todayTrafficIn:
+                type: integer
+              todayTrafficOut:
+                type: integer
+              curConns:
+                type: integer
     NodeHeartbeat:
       type: object
       properties:
@@ -563,6 +739,8 @@ components:
           type: array
           items:
             type: string
+        enable_tls:
+          type: boolean
     ProxyStatsIngest:
       type: object
       properties:
