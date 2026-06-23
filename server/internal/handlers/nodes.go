@@ -34,13 +34,14 @@ type nodeCreateRequest struct {
     Longitude      *float64 `json:"longitude,omitempty"`
     MaxConnections *int    `json:"max_connections,omitempty"`
     Weight         *float64 `json:"weight,omitempty"`
+    SubdomainHost  *string `json:"subdomain_host,omitempty"`
 }
 
 // NodesListCreateHandler handles GET /nodes and POST /nodes
 func (s *Server) NodesListCreateHandler(w http.ResponseWriter, r *http.Request) {
     switch r.Method {
     case http.MethodGet:
-        rows, err := s.DB.Query(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, frp_version, region, country, city, latitude, longitude, max_connections, weight, is_active, last_heartbeat, created_at, updated_at FROM nodes`)
+        rows, err := s.DB.Query(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, frp_version, region, country, city, latitude, longitude, max_connections, weight, subdomain_host, is_active, last_heartbeat, created_at, updated_at FROM nodes`)
         if err != nil {
             writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
             return
@@ -50,9 +51,9 @@ func (s *Server) NodesListCreateHandler(w http.ResponseWriter, r *http.Request) 
         for rows.Next() {
             var n model.Node
             var apiPort, bindPort, tlsEnabled, maxConn, isActive, dashPort sql.NullInt64
-            var region, country, city, frpVer, lastHeartbeat, createdAt, updatedAt, dashUser sql.NullString
+            var region, country, city, frpVer, lastHeartbeat, createdAt, updatedAt, dashUser, subdomainHost sql.NullString
             var lat, lng, weight sql.NullFloat64
-            if err := rows.Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &isActive, &lastHeartbeat, &createdAt, &updatedAt); err != nil {
+            if err := rows.Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &subdomainHost, &isActive, &lastHeartbeat, &createdAt, &updatedAt); err != nil {
                 writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
                 return
             }
@@ -91,6 +92,9 @@ func (s *Server) NodesListCreateHandler(w http.ResponseWriter, r *http.Request) 
             }
             if isActive.Valid {
                 n.IsActive = isActive.Int64 != 0
+            }
+            if subdomainHost.Valid {
+                n.SubdomainHost = subdomainHost.String
             }
             if lastHeartbeat.Valid {
                 if t, err := time.Parse(time.RFC3339, lastHeartbeat.String); err == nil {
@@ -192,8 +196,12 @@ func (s *Server) NodesListCreateHandler(w http.ResponseWriter, r *http.Request) 
                 prEnd = sql.NullInt64{Int64: int64(e), Valid: true}
             }
         }
-        _, err := s.DB.Exec(`INSERT INTO nodes (name, host, api_port, bind_port, tls_enabled, auth_token, dashboard_port, dashboard_user, dashboard_pwd, port_range_start, port_range_end, region, country, city, latitude, longitude, max_connections, weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            req.Name, req.Host, ap, bp, tls, req.AuthToken, dp, du, dpwd, prStart, prEnd, geoRegion, geoCountry, geoCity, lat, lng, maxCon, weight)
+        sh := sql.NullString{String: "", Valid: true}
+        if req.SubdomainHost != nil {
+            sh = sql.NullString{String: *req.SubdomainHost, Valid: true}
+        }
+        _, err := s.DB.Exec(`INSERT INTO nodes (name, host, api_port, bind_port, tls_enabled, auth_token, dashboard_port, dashboard_user, dashboard_pwd, port_range_start, port_range_end, region, country, city, latitude, longitude, max_connections, weight, subdomain_host) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            req.Name, req.Host, ap, bp, tls, req.AuthToken, dp, du, dpwd, prStart, prEnd, geoRegion, geoCountry, geoCity, lat, lng, maxCon, weight, sh)
         if err != nil {
             writeJSONError(w, "cannot create node", "INTERNAL", http.StatusInternalServerError)
             return
@@ -261,8 +269,9 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
         var lat, lng, weight sql.NullFloat64
         var maxConn, isActive, dashPort sql.NullInt64
         var lastHeartbeat sql.NullString
-        err := s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, frp_version, region, country, city, latitude, longitude, max_connections, weight, is_active, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
-            Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &isActive, &lastHeartbeat, &n.CreatedAt, &n.UpdatedAt)
+        var subdomainHost sql.NullString
+        err := s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, frp_version, region, country, city, latitude, longitude, max_connections, weight, subdomain_host, is_active, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
+            Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &subdomainHost, &isActive, &lastHeartbeat, &n.CreatedAt, &n.UpdatedAt)
         if err == sql.ErrNoRows {
             writeJSONError(w, "not found", "NOT_FOUND", http.StatusNotFound)
             return
@@ -296,6 +305,7 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
         if maxConn.Valid { n.MaxConnections = int(maxConn.Int64) }
         if weight.Valid { n.Weight = weight.Float64 }
         if isActive.Valid { n.IsActive = isActive.Int64 != 0 }
+        if subdomainHost.Valid { n.SubdomainHost = subdomainHost.String }
         if lastHeartbeat.Valid {
             if t, err := time.Parse(time.RFC3339, lastHeartbeat.String); err == nil {
                 n.LastHeartbeat = t
@@ -318,6 +328,7 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
             DashboardPort  *int    `json:"dashboard_port,omitempty"`
             DashboardUser  *string `json:"dashboard_user,omitempty"`
             DashboardPwd   *string `json:"dashboard_pwd,omitempty"`
+            SubdomainHost  *string `json:"subdomain_host,omitempty"`
         }
         if err := json.NewDecoder(r.Body).Decode(&upd); err != nil {
             writeJSONError(w, "bad request", "BAD_REQUEST", http.StatusBadRequest)
@@ -365,6 +376,10 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
             set = append(set, "dashboard_pwd = ?")
             args = append(args, *upd.DashboardPwd)
         }
+        if upd.SubdomainHost != nil {
+            set = append(set, "subdomain_host = ?")
+            args = append(args, *upd.SubdomainHost)
+        }
         if len(set) == 0 {
             writeJSONError(w, "nothing to update", "BAD_REQUEST", http.StatusBadRequest)
             return
@@ -380,9 +395,9 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
         // return updated node
         var n model.Node
         var apiPort, bindPort, tlsEnabled, dashPort sql.NullInt64
-        var dashUser, lastHeartbeat sql.NullString
-        err = s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
-            Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &lastHeartbeat, &n.CreatedAt, &n.UpdatedAt)
+        var dashUser, lastHeartbeat, subdomainHost sql.NullString
+        err = s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, subdomain_host, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
+            Scan(&n.ID, &n.Name, &n.Host, &apiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &subdomainHost, &lastHeartbeat, &n.CreatedAt, &n.UpdatedAt)
         if err == sql.ErrNoRows {
             writeJSONError(w, "not found", "NOT_FOUND", http.StatusNotFound)
             return
@@ -393,6 +408,7 @@ func (s *Server) NodeItemHandler(w http.ResponseWriter, r *http.Request) {
         if apiPort.Valid { n.ApiPort = int(apiPort.Int64) }
         if bindPort.Valid { n.BindPort = int(bindPort.Int64) }
         if tlsEnabled.Valid { n.TlsEnabled = tlsEnabled.Int64 != 0 }
+        if subdomainHost.Valid { n.SubdomainHost = subdomainHost.String }
         if dashPort.Valid { n.DashboardPort = int(dashPort.Int64) }
         if dashUser.Valid { n.DashboardUser = dashUser.String }
         if lastHeartbeat.Valid {
@@ -429,11 +445,11 @@ func (s *Server) NodeStatusHandler(w http.ResponseWriter, r *http.Request, idStr
     // Load node
     var n model.Node
     var nApiPort, bindPort, dashPort, tlsEnabled, maxConn, isActive sql.NullInt64
-    var dashUser, dashPwd, frpVer, lastHb, region, country, city sql.NullString
+    var dashUser, dashPwd, frpVer, lastHb, region, country, city, subdomainHost sql.NullString
     var lat, lng, weight sql.NullFloat64
     var createdAt, updatedAt sql.NullString
-    err = s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, dashboard_pwd, frp_version, region, country, city, latitude, longitude, max_connections, weight, is_active, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
-        Scan(&n.ID, &n.Name, &n.Host, &nApiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &dashPwd, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &isActive, &lastHb, &createdAt, &updatedAt)
+    err = s.DB.QueryRow(`SELECT id, name, host, api_port, bind_port, tls_enabled, dashboard_port, dashboard_user, dashboard_pwd, frp_version, region, country, city, latitude, longitude, max_connections, weight, subdomain_host, is_active, last_heartbeat, created_at, updated_at FROM nodes WHERE id = ?`, id).
+        Scan(&n.ID, &n.Name, &n.Host, &nApiPort, &bindPort, &tlsEnabled, &dashPort, &dashUser, &dashPwd, &frpVer, &region, &country, &city, &lat, &lng, &maxConn, &weight, &subdomainHost, &isActive, &lastHb, &createdAt, &updatedAt)
     if err == sql.ErrNoRows {
         writeJSONError(w, "not found", "NOT_FOUND", http.StatusNotFound)
         return
@@ -446,6 +462,7 @@ func (s *Server) NodeStatusHandler(w http.ResponseWriter, r *http.Request, idStr
     if tlsEnabled.Valid { n.TlsEnabled = tlsEnabled.Int64 != 0 }
     if dashPort.Valid { n.DashboardPort = int(dashPort.Int64) }
     if dashUser.Valid { n.DashboardUser = dashUser.String }
+    if subdomainHost.Valid { n.SubdomainHost = subdomainHost.String }
     if frpVer.Valid { n.FrpVersion = frpVer.String }
     if region.Valid { n.Region = region.String }
     if country.Valid { n.Country = country.String }
@@ -454,6 +471,7 @@ func (s *Server) NodeStatusHandler(w http.ResponseWriter, r *http.Request, idStr
     if lng.Valid { n.Longitude = lng.Float64 }
     if maxConn.Valid { n.MaxConnections = int(maxConn.Int64) }
     if weight.Valid { n.Weight = weight.Float64 }
+    if subdomainHost.Valid { n.SubdomainHost = subdomainHost.String }
     if isActive.Valid { n.IsActive = isActive.Int64 != 0 }
     if lastHb.Valid {
         if t, err := time.Parse(time.RFC3339, lastHb.String); err == nil {
@@ -697,6 +715,7 @@ func (s *Server) NodeBestHandler(w http.ResponseWriter, r *http.Request) {
         }
         nodes = append(nodes, n)
     }
+    // subdomain_host not queried in this path (best-node scoring)
 
     scorer := &NodeScorer{
         PreferRegion: q.Get("region"),

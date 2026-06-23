@@ -155,12 +155,15 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
             writeJSONError(w, "a tunnel with this name already exists", "CONFLICT", http.StatusConflict)
             return
         }
-        // Check for duplicate subdomain per node
+        // Check for duplicate subdomain across nodes that share the same subdomain_host
         if req.Subdomain != nil && *req.Subdomain != "" && req.NodeID != nil {
             var sdCount int
-            s.DB.QueryRow("SELECT COUNT(*) FROM proxies WHERE node_id = ? AND subdomain = ? AND subdomain IS NOT NULL AND subdomain != ''", *req.NodeID, *req.Subdomain).Scan(&sdCount)
+            s.DB.QueryRow(`SELECT COUNT(*) FROM proxies p
+                JOIN nodes n ON p.node_id = n.id
+                WHERE n.subdomain_host = (SELECT subdomain_host FROM nodes WHERE id = ?)
+                AND p.subdomain = ? AND p.subdomain IS NOT NULL AND p.subdomain != ''`, *req.NodeID, *req.Subdomain).Scan(&sdCount)
             if sdCount > 0 {
-                writeJSONError(w, fmt.Sprintf("subdomain %q already in use on this node", *req.Subdomain), "CONFLICT", http.StatusConflict)
+                writeJSONError(w, fmt.Sprintf("subdomain %q already in use (same subdomain_host)", *req.Subdomain), "CONFLICT", http.StatusConflict)
                 return
             }
         }
@@ -341,14 +344,17 @@ func (s *Server) ProxyItemHandler(w http.ResponseWriter, r *http.Request) {
             args = append(args, *upd.RemotePort)
         }
         if upd.Subdomain != nil {
-            // Check for duplicate subdomain on the same node
+            // Check for duplicate subdomain across nodes sharing the same subdomain_host
             var currentProxyNodeID sql.NullInt64
             s.DB.QueryRow("SELECT node_id FROM proxies WHERE id = ?", id).Scan(&currentProxyNodeID)
             if currentProxyNodeID.Valid && *upd.Subdomain != "" {
                 var sdCount int
-                s.DB.QueryRow("SELECT COUNT(*) FROM proxies WHERE node_id = ? AND subdomain = ? AND subdomain IS NOT NULL AND subdomain != '' AND id != ?", currentProxyNodeID.Int64, *upd.Subdomain, id).Scan(&sdCount)
+                s.DB.QueryRow(`SELECT COUNT(*) FROM proxies p
+                    JOIN nodes n ON p.node_id = n.id
+                    WHERE n.subdomain_host = (SELECT subdomain_host FROM nodes WHERE id = ?)
+                    AND p.subdomain = ? AND p.subdomain IS NOT NULL AND p.subdomain != '' AND p.id != ?`, currentProxyNodeID.Int64, *upd.Subdomain, id).Scan(&sdCount)
                 if sdCount > 0 {
-                    writeJSONError(w, fmt.Sprintf("subdomain %q already in use on this node", *upd.Subdomain), "CONFLICT", http.StatusConflict)
+                    writeJSONError(w, fmt.Sprintf("subdomain %q already in use (same subdomain_host)", *upd.Subdomain), "CONFLICT", http.StatusConflict)
                     return
                 }
             }

@@ -454,7 +454,7 @@ TOKEN=$(echo "$LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin)[
 curl -X POST http://localhost:8080/api/v1/nodes \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"public-frps","host":"YOUR_SERVER_PUBLIC_IP","bind_port":7000}'
+  -d '{"name":"public-frps","host":"YOUR_SERVER_PUBLIC_IP","bind_port":7000,"subdomain_host":"tunnel.example.com"}'
 
 # Verify
 curl http://localhost:8080/api/v1/nodes -H "Authorization: Bearer $TOKEN"

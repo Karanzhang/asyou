@@ -36,6 +36,7 @@ type Node struct {
     IsActive        bool      `db:"is_active" json:"is_active"`
     PortRangeStart  int       `db:"port_range_start" json:"port_range_start"`
     PortRangeEnd    int       `db:"port_range_end" json:"port_range_end"`
+    SubdomainHost   string    `db:"subdomain_host" json:"subdomain_host"`
     Score           float64   `db:"-" json:"score,omitempty"` // computed by scheduler
     LastHeartbeat   time.Time `db:"last_heartbeat" json:"last_heartbeat"`
     CreatedAt       time.Time `db:"created_at" json:"created_at"`
