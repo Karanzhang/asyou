@@ -106,9 +106,19 @@ ${proxy.subdomain ? `subdomain = ${proxy.subdomain}` : ''}`
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(frpcINI)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {}
+    } catch {
+      // Fallback for HTTP pages where Clipboard API is blocked
+      const ta = document.createElement('textarea')
+      ta.value = frpcINI
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const handleDownloadINI = () => {
