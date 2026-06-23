@@ -155,6 +155,15 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
             writeJSONError(w, "a tunnel with this name already exists", "CONFLICT", http.StatusConflict)
             return
         }
+        // Check for duplicate subdomain per node
+        if req.Subdomain != nil && *req.Subdomain != "" && req.NodeID != nil {
+            var sdCount int
+            s.DB.QueryRow("SELECT COUNT(*) FROM proxies WHERE node_id = ? AND subdomain = ? AND subdomain IS NOT NULL AND subdomain != ''", *req.NodeID, *req.Subdomain).Scan(&sdCount)
+            if sdCount > 0 {
+                writeJSONError(w, fmt.Sprintf("subdomain %q already in use on this node", *req.Subdomain), "CONFLICT", http.StatusConflict)
+                return
+            }
+        }
         res, err := s.DB.Exec(`INSERT INTO proxies (user_id, node_id, name, type, local_ip, local_port, remote_port, subdomain, custom_domains, enable_tls, status, annotations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, mustGetUserID(r), nodeID, req.Name, req.Type, localIP, req.LocalPort, remotePortVal, req.Subdomain, cdoms, 0, "stopped", "")
         if err != nil {
             writeJSONError(w, "cannot create proxy: "+err.Error(), "INTERNAL", http.StatusInternalServerError)
@@ -332,6 +341,17 @@ func (s *Server) ProxyItemHandler(w http.ResponseWriter, r *http.Request) {
             args = append(args, *upd.RemotePort)
         }
         if upd.Subdomain != nil {
+            // Check for duplicate subdomain on the same node
+            var currentProxyNodeID sql.NullInt64
+            s.DB.QueryRow("SELECT node_id FROM proxies WHERE id = ?", id).Scan(&currentProxyNodeID)
+            if currentProxyNodeID.Valid && *upd.Subdomain != "" {
+                var sdCount int
+                s.DB.QueryRow("SELECT COUNT(*) FROM proxies WHERE node_id = ? AND subdomain = ? AND subdomain IS NOT NULL AND subdomain != '' AND id != ?", currentProxyNodeID.Int64, *upd.Subdomain, id).Scan(&sdCount)
+                if sdCount > 0 {
+                    writeJSONError(w, fmt.Sprintf("subdomain %q already in use on this node", *upd.Subdomain), "CONFLICT", http.StatusConflict)
+                    return
+                }
+            }
             set = append(set, "subdomain = ?")
             args = append(args, *upd.Subdomain)
         }
