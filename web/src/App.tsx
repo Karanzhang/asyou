@@ -38,7 +38,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<ProxyList />} />
         <Route path="/proxies/:id" element={<ProxyDetail />} />
-        <Route path="/nodes" element={<NodeList />} />
+        <Route path="/nodes" element={<NodeList user={auth.user} />} />
         <Route path="/audit-logs" element={<AuditLogs />} />
         <Route path="/api-keys" element={<ApiKeys />} />
         <Route path="/docs" element={<Docs />} />

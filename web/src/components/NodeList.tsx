@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { listNodes, createNode, deleteNode, getNodeStatus } from '../api/client'
-import type { Node as AsyouNode, NodeStatusResponse } from '../types'
+import type { Node as AsyouNode, NodeStatusResponse, User } from '../types'
 
-export default function NodeList() {
+export default function NodeList({ user }: { user: User | null }) {
+  const isAdmin = user?.role === 'admin'
   const [nodes, setNodes] = useState<AsyouNode[]>([])
   const [statuses, setStatuses] = useState<Record<number, NodeStatusResponse>>({})
   const [showCreate, setShowCreate] = useState(false)
@@ -70,10 +71,10 @@ export default function NodeList() {
       {toast && <div className={`toast ${toast.type}`}>{toast.msg}</div>}
       <div className="page-header">
         <h1>Nodes</h1>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Add Node</button>
+        {isAdmin && <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Add Node</button>}
       </div>
 
-      {showCreate && (
+      {isAdmin && showCreate && (
         <CreateNodeForm onDone={() => { setShowCreate(false); load() }} onToast={showToast} />
       )}
 
@@ -154,7 +155,7 @@ export default function NodeList() {
                         {n.last_heartbeat ? new Date(n.last_heartbeat).toLocaleString() : '—'}
                       </td>
                       <td onClick={e => e.stopPropagation()}>
-                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(n.id)}>Delete</button>
+                        {isAdmin && <button className="btn btn-danger btn-sm" onClick={() => handleDelete(n.id)}>Delete</button>}
                       </td>
                     </tr>
                     {isDetail && st?.proxies && st.proxies.length > 0 && (
