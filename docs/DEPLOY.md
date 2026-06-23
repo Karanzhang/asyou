@@ -462,6 +462,90 @@ curl http://localhost:8080/api/v1/nodes -H "Authorization: Bearer $TOKEN"
 
 ---
 
+## 8.1 SMTP Configuration (Password Reset)
+
+To enable the "Forgot Password" feature, configure SMTP via environment variables.
+
+### 8.1.1 Using SendGrid (Recommended — Free Tier: 100 emails/day)
+
+1. Register at [sendgrid.com](https://sendgrid.com) and create an API Key
+2. Update the asyou systemd service:
+
+```bash
+sudo mkdir -p /etc/asyou
+sudo tee /etc/asyou/smtp.env << 'EOF'
+ASYOU_SMTP_HOST=smtp.sendgrid.net
+ASYOU_SMTP_PORT=587
+ASYOU_SMTP_USER=apikey
+ASYOU_SMTP_PASS=SG.xxxxxxxxxxxxxxxxxxxx  # Your SendGrid API Key
+ASYOU_SMTP_FROM=noreply@your-domain.com
+ASYOU_URL=https://asyou.example.com
+EOF
+```
+
+Then edit the systemd service to load the env file:
+
+```bash
+sudo tee /etc/systemd/system/asyou-server.service << 'EOF'
+[Unit]
+Description=asyou tunnel management server
+After=network.target frps.service
+Wants=frps.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/asyou-server
+WorkingDirectory=/var/lib/asyou
+Restart=always
+RestartSec=5
+User=nobody
+Group=nogroup
+Environment=HOME=/var/lib/asyou
+EnvironmentFile=/etc/asyou/smtp.env
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl restart asyou-server
+```
+
+### 8.1.2 Using QQ / 163 Mailbox (Free)
+
+Generate an SMTP authorization code from your mailbox settings, then set:
+
+```bash
+# QQ Mail
+ASYOU_SMTP_HOST=smtp.qq.com
+ASYOU_SMTP_PORT=587
+ASYOU_SMTP_USER=yourname@qq.com
+ASYOU_SMTP_PASS=your-authorization-code    # Not QQ password!
+ASYOU_SMTP_FROM=yourname@qq.com
+
+# 163 Mail
+ASYOU_SMTP_HOST=smtp.163.com
+ASYOU_SMTP_PORT=587
+ASYOU_SMTP_USER=yourname@163.com
+ASYOU_SMTP_PASS=your-authorization-code
+ASYOU_SMTP_FROM=yourname@163.com
+```
+
+### 8.1.3 Environment Variables Reference
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ASYOU_SMTP_HOST` | No | — | SMTP server hostname |
+| `ASYOU_SMTP_PORT` | No | `587` | SMTP server port |
+| `ASYOU_SMTP_USER` | No | — | SMTP username |
+| `ASYOU_SMTP_PASS` | No | — | SMTP password / app password |
+| `ASYOU_SMTP_FROM` | No | — | From email address |
+| `ASYOU_URL` | No | `http://localhost:8080` | Public URL for reset links |
+
+If SMTP is not configured, the "Forgot Password" feature will silently return success but no email will be sent.
+
+---
+
 ## 9. Client Installation (frpc + CLI)
 
 Install the asyou client on machines that need to expose services.
