@@ -27,6 +27,12 @@ asyou expose 3000 --n my-app
 # Expose on a specific node
 asyou expose 3000 --n my-app --node 1
 
+# Expose an HTTP tunnel with subdomain (requires frps subdomain_host)
+asyou expose 8080 --type http --subdomain myapp -n my-web
+
+# Expose a tunnel on a specific node with custom remote port
+asyou expose 3000 -n my-app --node 1 --remote-port 31000
+
 # Delete a tunnel
 asyou delete 2
 # → Tunnel #2 deleted
@@ -46,7 +52,7 @@ asyou logout
 |---|---|
 | `login [--s <url>] <email> <password>` | Login and save credentials |
 | `logout` | Clear saved session |
-| `expose [--n <name>] [--node <id>] <port>` | Create + start a tunnel |
+| `expose [--n <name>] [--type <tcp\|http\|https\|udp>] [--subdomain <name>] [--node <id>] [--remote-port <port>] <port>` | Create + start a tunnel |
 | `list` | List all tunnels |
 | `delete <id>` | Delete a tunnel |
 | `nodes` | List frps nodes |

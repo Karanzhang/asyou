@@ -50,7 +50,7 @@ func printUsage() {
 Usage:
   asyou login <email> <password>          Login to server
   asyou logout                            Clear saved credentials
-  asyou expose [--n <name>] [--node <id>] [--remote-port <port>] <local_port>   Create & start a tunnel (--node optional; auto-selects if omitted)
+  asyou expose [--n <name>] [--type <tcp|http|https|udp>] [--subdomain <name>] [--node <id>] [--remote-port <port>] <local_port>   Create & start a tunnel
   asyou list                              List your tunnels
   asyou delete <id>                       Delete a tunnel
   asyou start <id>                        Start frpc for an existing tunnel
@@ -122,6 +122,8 @@ func cmdExpose() {
 	var tunnelName string
 	nodeID := 0
 	remotePort := 0
+	tunnelType := "tcp"
+	subdomain := ""
 	var positional []string
 	for i := 0; i < len(rawArgs); i++ {
 		switch rawArgs[i] {
@@ -149,12 +151,28 @@ func cmdExpose() {
 				fmt.Fprintln(os.Stderr, "error: --remote-port requires a value")
 				os.Exit(1)
 			}
+		case "--type":
+			if i+1 < len(rawArgs) {
+				tunnelType = rawArgs[i+1]
+				i++
+			} else {
+				fmt.Fprintln(os.Stderr, "error: --type requires a value (tcp, http, https, udp)")
+				os.Exit(1)
+			}
+		case "--subdomain":
+			if i+1 < len(rawArgs) {
+				subdomain = rawArgs[i+1]
+				i++
+			} else {
+				fmt.Fprintln(os.Stderr, "error: --subdomain requires a value")
+				os.Exit(1)
+			}
 		default:
 			positional = append(positional, rawArgs[i])
 		}
 	}
 	if len(positional) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: asyou expose [--n <name>] [--node <id>] [--remote-port <port>] <local_port>")
+		fmt.Fprintln(os.Stderr, "Usage: asyou expose [--n <name>] [--type <tcp|http|https|udp>] [--subdomain <name>] [--node <id>] [--remote-port <port>] <local_port>")
 		os.Exit(1)
 	}
 
@@ -202,8 +220,8 @@ func cmdExpose() {
 		}
 	}
 
-	fmt.Printf("[asyou] creating tunnel %q (local port %d, node %d)...\n", tunnelName, port, nodeID)
-	proxy, err := client.CreateProxy(tunnelName, "tcp", port, nodeID, remotePort)
+	fmt.Printf("[asyou] creating tunnel %q (type=%s, local port %d, node %d)...\n", tunnelName, tunnelType, port, nodeID)
+	proxy, err := client.CreateProxy(tunnelName, tunnelType, port, nodeID, remotePort, subdomain)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create failed: %v\n", err)
 		os.Exit(1)
@@ -268,15 +286,21 @@ server_addr = %s
 server_port = %d
 
 [%s]
-type = tcp
+type = %s
 local_ip = 127.0.0.1
 local_port = %d
-`, frpsHost, frpsPort, tunnelName, port)
-	// Add remote_port if specified by user or assigned by server
-	if remotePort > 0 {
-		iniContent += fmt.Sprintf("remote_port = %d\n", remotePort)
-	} else if proxy.RemotePort != nil && *proxy.RemotePort > 0 {
-		iniContent += fmt.Sprintf("remote_port = %d\n", *proxy.RemotePort)
+`, frpsHost, frpsPort, tunnelName, tunnelType, port)
+	// Add subdomain for http/https types
+	if subdomain != "" && (tunnelType == "http" || tunnelType == "https") {
+		iniContent += fmt.Sprintf("subdomain = %s\n", subdomain)
+	}
+	// Add remote_port for tcp/udp types or when explicitly specified
+	if tunnelType == "tcp" || tunnelType == "udp" {
+		if remotePort > 0 {
+			iniContent += fmt.Sprintf("remote_port = %d\n", remotePort)
+		} else if proxy.RemotePort != nil && *proxy.RemotePort > 0 {
+			iniContent += fmt.Sprintf("remote_port = %d\n", *proxy.RemotePort)
+		}
 	}
 	fmt.Printf("[asyou] generated frpc config:\n%s\n", iniContent)
 	if err := os.WriteFile(cfgPath, []byte(iniContent), 0600); err != nil {

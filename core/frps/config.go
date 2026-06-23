@@ -17,6 +17,10 @@ type Config struct {
 	// HTTP/HTTPS virtual host ports (for http/https proxy types)
 	VhostHTTPPort  int
 	VhostHTTPSPort int
+	// Subdomain host — e.g. "tunnel.example.com"
+	// When set, frpc proxies with type=http/https and a subdomain value
+	// become accessible at <subdomain>.<subdomain_host>
+	SubdomainHost string
 	// Admin API
 	AdminAddr string
 	AdminPort int
@@ -55,6 +59,9 @@ func BuildINI(cfg *Config) string {
 	}
 	if cfg.VhostHTTPSPort > 0 {
 		b.WriteString(fmt.Sprintf("vhost_https_port = %d\n", cfg.VhostHTTPSPort))
+	}
+	if cfg.SubdomainHost != "" {
+		b.WriteString(fmt.Sprintf("subdomain_host = %s\n", cfg.SubdomainHost))
 	}
 	if cfg.Token != "" {
 		b.WriteString(fmt.Sprintf("token = %s\n", cfg.Token))

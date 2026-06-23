@@ -111,6 +111,10 @@ allow_ports = "31000-31499"
 # vhost_http_port = 80
 # vhost_https_port = 443
 
+# Optional: subdomain host — enables http://<subdomain>.<host>/ access
+# Requires DNS wildcard record *.tunnel.example.com → this server
+# subdomain_host = tunnel.example.com
+
 # Optional: KCP/QUIC transport
 # kcp_bind_port = 7000
 # bind_udp_port = 7001

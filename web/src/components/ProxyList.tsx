@@ -191,8 +191,11 @@ function CreateProxyForm({ nodes, onDone, onToast, navigate }: { nodes: AsyouNod
             </small>
           </div>
           <div className="form-group">
-            <label>Subdomain (optional)</label>
-            <input value={subdomain} onChange={e => setSubdomain(e.target.value)} />
+            <label>Subdomain (optional) {type !== 'http' && type !== 'https' && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(HTTP/HTTPS only)</span>}</label>
+            <input value={subdomain} onChange={e => setSubdomain(e.target.value)}
+              disabled={type !== 'http' && type !== 'https'}
+              placeholder={type === 'http' || type === 'https' ? 'e.g. myapp' : 'only for HTTP/HTTPS'}
+              style={{ opacity: type !== 'http' && type !== 'https' ? 0.5 : 1 }} />
           </div>
           <div className="form-group">
             <label>Node</label>

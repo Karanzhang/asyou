@@ -138,7 +138,7 @@ func (c *Client) GetProxy(id int64) (*Proxy, error) {
 }
 
 // CreateProxy creates a new tunnel.
-func (c *Client) CreateProxy(name, proxyType string, localPort int, nodeID int, remotePort int) (*Proxy, error) {
+func (c *Client) CreateProxy(name, proxyType string, localPort int, nodeID int, remotePort int, subdomain string) (*Proxy, error) {
 	body := map[string]interface{}{
 		"name": name, "type": proxyType, "local_port": localPort,
 	}
@@ -147,6 +147,9 @@ func (c *Client) CreateProxy(name, proxyType string, localPort int, nodeID int, 
 	}
 	if remotePort > 0 {
 		body["remote_port"] = remotePort
+	}
+	if subdomain != "" {
+		body["subdomain"] = subdomain
 	}
 	var p Proxy
 	if err := c.do("POST", "/api/v1/proxies", body, &p); err != nil {
