@@ -51,6 +51,11 @@ export default function LoginPage({ onLogin }: Props) {
         <button className="btn btn-primary" type="submit" disabled={busy}>
           {busy ? 'Please wait…' : mode === 'login' ? 'Sign In' : 'Create Account'}
         </button>
+        {mode === 'login' && (
+          <p style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '0.85rem' }}>
+            <a href="/forgot-password" onClick={e => { e.preventDefault(); window.location.href = '/forgot-password' }}>Forgot Password?</a>
+          </p>
+        )}
         <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
           {mode === 'login' ? (
             <>Don't have an account? <a href="#" onClick={e => { e.preventDefault(); setMode('register'); setError('') }}>Register</a></>

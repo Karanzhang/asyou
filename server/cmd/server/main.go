@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -30,7 +31,29 @@ func main() {
 	frpManager := frp.NewManager()
 	sseHub := handlers.NewSSEHub()
 	acmeCfg := handlers.DefaultACMEConfig()
-	s := &handlers.Server{DB: dbConn, FRP: frpManager, SSE: sseHub, ACME: acmeCfg, ProxyStartPort: 31000}
+
+	publicURL := os.Getenv("ASYOU_URL")
+	if publicURL == "" {
+		publicURL = "http://localhost:8080"
+	}
+	smtpPort := 587
+	if p := os.Getenv("ASYOU_SMTP_PORT"); p != "" {
+		fmt.Sscanf(p, "%d", &smtpPort)
+	}
+
+	s := &handlers.Server{
+		DB:            dbConn,
+		FRP:           frpManager,
+		SSE:           sseHub,
+		ACME:          acmeCfg,
+		ProxyStartPort: 31000,
+		SMTPHost:      os.Getenv("ASYOU_SMTP_HOST"),
+		SMTPPort:      smtpPort,
+		SMTPUser:      os.Getenv("ASYOU_SMTP_USER"),
+		SMTPPass:      os.Getenv("ASYOU_SMTP_PASS"),
+		SMTPFrom:      os.Getenv("ASYOU_SMTP_FROM"),
+		PublicURL:     publicURL,
+	}
 
 	// Start periodic stats broadcaster (every 10s)
 	s.StartStatsBroadcaster(10 * time.Second)
@@ -41,6 +64,8 @@ func main() {
 	})
 	http.HandleFunc("/api/v1/auth/register", s.RegisterHandler)
 	http.HandleFunc("/api/v1/auth/login", s.LoginHandler)
+	http.HandleFunc("/api/v1/auth/forgot-password", s.ForgotPasswordHandler)
+	http.HandleFunc("/api/v1/auth/reset-password", s.ResetPasswordHandler)
 	// version info (no auth)
 	http.HandleFunc("/api/v1/version", s.VersionHandler)
 	// users (protected)

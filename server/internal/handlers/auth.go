@@ -2,10 +2,13 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/smtp"
 	"strings"
 	"time"
 
@@ -26,6 +29,12 @@ type Server struct {
 	FRP       *frp.Manager
 	SSE       *SSEHub
 	ACME      *ACMEConfig
+	SMTPHost  string
+	SMTPPort  int
+	SMTPUser  string
+	SMTPPass  string
+	SMTPFrom  string
+	PublicURL string // public-facing URL for reset links
 	// ProxyStartPort is the first port in the range auto-assigned to proxies.
 	// Must match the allow_ports range in frps config (default: 31000).
 	ProxyStartPort int
@@ -203,6 +212,133 @@ func (s *Server) UsersMeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(u)
+}
+
+// generateResetToken creates a cryptographically random token.
+func generateResetToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// ForgotPasswordHandler sends a password reset email.
+func (s *Server) ForgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSONError(w, "method not allowed", "METHOD_NOT_ALLOWED", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "bad request", "BAD_REQUEST", http.StatusBadRequest)
+		return
+	}
+	// Always return 200 regardless of whether email exists (prevent enumeration)
+	defer func() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"message": "If the email exists, a reset link has been sent."})
+	}()
+
+	var userID int64
+	err := s.DB.QueryRow(`SELECT id FROM users WHERE email = ?`, req.Email).Scan(&userID)
+	if err != nil {
+		return // email not found — silently return
+	}
+
+	token, err := generateResetToken()
+	if err != nil {
+		return
+	}
+
+	expiresAt := time.Now().Add(1 * time.Hour)
+	if _, err := s.DB.Exec(`INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)`, userID, token, expiresAt); err != nil {
+		return
+	}
+
+	// Build reset link
+	resetURL := s.PublicURL + "/reset-password?token=" + token
+	body := fmt.Sprintf(`Hello,
+
+You requested a password reset for your asyou account.
+
+Click the link below to reset your password (valid for 1 hour):
+%s
+
+If you did not request this, please ignore this email.
+
+— asyou`, resetURL)
+
+	s.sendEmail(req.Email, "asyou Password Reset", body)
+}
+
+// ResetPasswordHandler resets the password using a valid token.
+func (s *Server) ResetPasswordHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSONError(w, "method not allowed", "METHOD_NOT_ALLOWED", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Token    string `json:"token"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, "bad request", "BAD_REQUEST", http.StatusBadRequest)
+		return
+	}
+	if req.Token == "" || req.Password == "" {
+		writeJSONError(w, "token and password required", "BAD_REQUEST", http.StatusBadRequest)
+		return
+	}
+
+	var userID int64
+	var expiresAt time.Time
+	err := s.DB.QueryRow(`SELECT user_id, expires_at FROM password_resets WHERE token = ? AND used = 0`, req.Token).Scan(&userID, &expiresAt)
+	if err != nil {
+		writeJSONError(w, "invalid or expired token", "INVALID_TOKEN", http.StatusBadRequest)
+		return
+	}
+	if time.Now().After(expiresAt) {
+		writeJSONError(w, "token has expired", "EXPIRED_TOKEN", http.StatusBadRequest)
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := s.DB.Exec(`UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, string(hash), userID); err != nil {
+		writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
+		return
+	}
+	// Mark token as used
+	s.DB.Exec(`UPDATE password_resets SET used = 1 WHERE token = ?`, req.Token)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Password has been reset successfully."})
+}
+
+// sendEmail sends an email via SMTP.
+func (s *Server) sendEmail(to, subject, body string) {
+	if s.SMTPHost == "" {
+		return // SMTP not configured
+	}
+	port := s.SMTPPort
+	if port == 0 {
+		port = 587
+	}
+	auth := smtp.PlainAuth("", s.SMTPUser, s.SMTPPass, s.SMTPHost)
+	msg := []byte(fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s", s.SMTPFrom, to, subject, body))
+	addr := fmt.Sprintf("%s:%d", s.SMTPHost, port)
+	if err := smtp.SendMail(addr, auth, s.SMTPFrom, []string{to}, msg); err != nil {
+		// Log but don't expose to client
+		fmt.Printf("[smtp] send failed: %v\n", err)
+	}
 }
 
 // writeJSONError sends a structured error response.

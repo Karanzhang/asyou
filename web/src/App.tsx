@@ -2,6 +2,8 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import Layout from './components/Layout'
 import LoginPage from './components/LoginPage'
+import ForgotPassword from './components/ForgotPassword'
+import ResetPassword from './components/ResetPassword'
 import ProxyList from './components/ProxyList'
 import ProxyDetail from './components/ProxyDetail'
 import NodeList from './components/NodeList'
@@ -17,6 +19,17 @@ export default function App() {
   }
 
   if (!auth.isLoggedIn) {
+    // Allow access to forgot/reset pages without login
+    const isPublicRoute = window.location.pathname.startsWith('/forgot-password') ||
+      window.location.pathname.startsWith('/reset-password')
+    if (isPublicRoute) {
+      return (
+        <Routes>
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+        </Routes>
+      )
+    }
     return <LoginPage onLogin={auth.login} />
   }
 
