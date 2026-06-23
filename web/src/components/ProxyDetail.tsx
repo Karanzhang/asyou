@@ -303,6 +303,20 @@ exec "$FRPC_PATH" -c "$CONFIG_FILE"`
           Run frpc on your local machine to connect this tunnel to the frps server.
         </p>
 
+        {/* Download frp */}
+        <div style={{ marginBottom: '1rem', padding: '0.8rem', background: 'var(--bg)', borderRadius: 'var(--radius)' }}>
+          <p style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>📥 Download frp v{FRP_VERSION}</p>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <a className="btn btn-outline btn-sm" href={`https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_windows_amd64.zip`} target="_blank" rel="noopener">Windows amd64</a>
+            <a className="btn btn-outline btn-sm" href={`https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_amd64.tar.gz`} target="_blank" rel="noopener">Linux amd64</a>
+            <a className="btn btn-outline btn-sm" href={`https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_darwin_amd64.tar.gz`} target="_blank" rel="noopener">macOS amd64</a>
+            <a className="btn btn-outline btn-sm" href={`https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_arm64.tar.gz`} target="_blank" rel="noopener">Linux arm64</a>
+          </div>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+            Extract and place <code>frpc</code> (or <code>frpc.exe</code> on Windows) in your PATH, or use the run script below which auto-downloads it.
+          </p>
+        </div>
+
         <div style={{ marginBottom: '0.5rem' }}>
           <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>frpc command:</span>
         </div>
