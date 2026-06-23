@@ -34,6 +34,8 @@ type Node struct {
     MaxConnections  int       `db:"max_connections" json:"max_connections"`
     Weight          float64   `db:"weight" json:"weight"`
     IsActive        bool      `db:"is_active" json:"is_active"`
+    PortRangeStart  int       `db:"port_range_start" json:"port_range_start"`
+    PortRangeEnd    int       `db:"port_range_end" json:"port_range_end"`
     Score           float64   `db:"-" json:"score,omitempty"` // computed by scheduler
     LastHeartbeat   time.Time `db:"last_heartbeat" json:"last_heartbeat"`
     CreatedAt       time.Time `db:"created_at" json:"created_at"`

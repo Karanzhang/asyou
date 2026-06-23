@@ -105,7 +105,7 @@ sudo tee /etc/frps.toml << 'EOF'
 [common]
 bind_port = 7000
 bind_addr = "0.0.0.0"
-allow_ports = "31000-31999"
+allow_ports = "31000-31499"
 
 # Optional: HTTP/HTTPS virtual host ports (for http/https proxy types)
 # vhost_http_port = 80
@@ -169,7 +169,7 @@ sudo tee /etc/frps-node1.toml << 'EOF'
 [common]
 bind_addr = "0.0.0.0"
 bind_port = 7001
-allow_ports = "31000-31199"
+allow_ports = "31600-31699"
 token = "node1-secret"
 
 dashboard_port = 7501
@@ -186,7 +186,7 @@ sudo tee /etc/frps-node2.toml << 'EOF'
 [common]
 bind_addr = "0.0.0.0"
 bind_port = 7002
-allow_ports = "31200-31399"
+allow_ports = "31700-31799"
 token = "node2-secret"
 
 dashboard_port = 7502
@@ -203,7 +203,7 @@ sudo tee /etc/frps-node3.toml << 'EOF'
 [common]
 bind_addr = "0.0.0.0"
 bind_port = 7003
-allow_ports = "31400-31599"
+allow_ports = "31800-31899"
 token = "node3-secret"
 
 dashboard_port = 7503
@@ -224,7 +224,7 @@ sudo frps -c /etc/frps-node2.toml &
 sudo frps -c /etc/frps-node3.toml &
 
 # Verify all started
-ss -tlnp | grep frps
+sudo ss -tlnp | grep frps
 # Should show 7001 7002 7003 7501 7502 7503
 ```
 

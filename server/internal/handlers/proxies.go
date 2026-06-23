@@ -141,16 +141,12 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
         if req.NodeID != nil {
             nodeID = *req.NodeID
         }
-        // Auto-assign remote port if not specified
+        // Auto-assign remote port based on node's port range
         var remotePortVal interface{}
         if req.RemotePort != nil {
             remotePortVal = *req.RemotePort
         } else if req.NodeID != nil {
-            startPort := s.ProxyStartPort
-            if startPort == 0 {
-                startPort = 31000
-            }
-            remotePortVal = startPort
+            remotePortVal = s.assignNodePort(*req.NodeID)
         }
         // Check for duplicate name per user
         var count int
@@ -675,6 +671,26 @@ func (s *Server) loadNode(nodeID *int64) (*model.Node, error) {
         }
     }
     return &n, nil
+}
+
+// assignNodePort finds the next available remote port for a node within its range.
+func (s *Server) assignNodePort(nodeID int64) int {
+    var rangeStart, rangeEnd int
+    err := s.DB.QueryRow(`SELECT COALESCE(port_range_start, 31000), COALESCE(port_range_end, 31999) FROM nodes WHERE id = ?`, nodeID).Scan(&rangeStart, &rangeEnd)
+    if err != nil {
+        return 31000
+    }
+    // Find the highest used port for this node
+    var maxPort int
+    s.DB.QueryRow(`SELECT COALESCE(MAX(remote_port), 0) FROM proxies WHERE node_id = ? AND remote_port IS NOT NULL`, nodeID).Scan(&maxPort)
+    next := maxPort + 1
+    if next < rangeStart {
+        next = rangeStart
+    }
+    if next > rangeEnd {
+        next = rangeStart // wrap around if full
+    }
+    return next
 }
 
 // fetchNodeProxies queries frps admin API for all active proxies on a node.

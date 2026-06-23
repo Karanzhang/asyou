@@ -24,6 +24,8 @@ type nodeCreateRequest struct {
     DashboardPort  *int    `json:"dashboard_port,omitempty"`
     DashboardUser  *string `json:"dashboard_user,omitempty"`
     DashboardPwd   *string `json:"dashboard_pwd,omitempty"`
+    PortRangeStart *int    `json:"port_range_start,omitempty"`
+    PortRangeEnd   *int    `json:"port_range_end,omitempty"`
     Region         *string `json:"region,omitempty"`
     Country        *string `json:"country,omitempty"`
     City           *string `json:"city,omitempty"`
