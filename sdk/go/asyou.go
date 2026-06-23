@@ -119,6 +119,27 @@ func (c *Client) Register(email, password, displayName string) error {
 	return c.Login(email, password)
 }
 
+// ForgotPassword sends a password reset email for the given address.
+// The server SMTP configuration must be set up.
+func (c *Client) ForgotPassword(email string) error {
+	var res struct {
+		Message string `json:"message"`
+	}
+	return c.do("POST", "/api/v1/auth/forgot-password", map[string]string{
+		"email": email,
+	}, &res)
+}
+
+// ResetPassword resets the user's password using a reset token.
+func (c *Client) ResetPassword(token, newPassword string) error {
+	var res struct {
+		Message string `json:"message"`
+	}
+	return c.do("POST", "/api/v1/auth/reset-password", map[string]string{
+		"token": token, "password": newPassword,
+	}, &res)
+}
+
 // ListProxies returns all tunnels for the authenticated user.
 func (c *Client) ListProxies() ([]Proxy, error) {
 	var list []Proxy

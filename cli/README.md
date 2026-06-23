@@ -37,6 +37,14 @@ asyou expose 3000 -n my-app --node 1 --remote-port 31000
 asyou delete 2
 # → Tunnel #2 deleted
 
+# Send password reset email
+asyou reset-password forgot admin@example.com
+# → If the email exists, a reset link has been sent.
+
+# Reset password with token from email
+asyou reset-password abc123... my-new-password
+# → Password has been reset successfully.
+
 # List nodes
 asyou nodes
 # → ID   Name   Host             Port

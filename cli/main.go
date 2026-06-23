@@ -37,6 +37,8 @@ func main() {
 		cmdStart()
 	case "nodes":
 		cmdNodes()
+	case "reset-password":
+		cmdResetPassword()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
 		printUsage()
@@ -54,7 +56,9 @@ Usage:
   asyou list                              List your tunnels
   asyou delete <id>                       Delete a tunnel
   asyou start <id>                        Start frpc for an existing tunnel
-  asyou nodes                             List available nodes`)
+  asyou nodes                             List available nodes
+  asyou reset-password forgot <email>     Send password reset email
+  asyou reset-password <token> <pass>     Reset password using token from email`)
 }
 
 func configPath() string {
@@ -524,6 +528,43 @@ func cmdNodes() {
 	for _, n := range nodes {
 		fmt.Printf("%-4d %-20s %-16s %d\n", n.ID, n.Name, n.Host, n.BindPort)
 	}
+}
+
+func cmdResetPassword() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, "Usage:")
+		fmt.Fprintln(os.Stderr, "  asyou reset-password forgot <email>           Send reset email")
+		fmt.Fprintln(os.Stderr, "  asyou reset-password <token> <new-password>  Reset password with token")
+		os.Exit(1)
+	}
+
+	client := loadConfig()
+
+	if os.Args[2] == "forgot" {
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "Usage: asyou reset-password forgot <email>")
+			os.Exit(1)
+		}
+		email := os.Args[3]
+		if err := client.ForgotPassword(email); err != nil {
+			fmt.Fprintf(os.Stderr, "failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("If the email exists, a reset link has been sent.")
+		return
+	}
+
+	if len(os.Args) < 4 {
+		fmt.Fprintln(os.Stderr, "Usage: asyou reset-password <token> <new-password>")
+		os.Exit(1)
+	}
+	token := os.Args[2]
+	newPass := os.Args[3]
+	if err := client.ResetPassword(token, newPass); err != nil {
+		fmt.Fprintf(os.Stderr, "reset failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Password has been reset successfully.")
 }
 
 func cmdVersion() {
