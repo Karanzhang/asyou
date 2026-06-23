@@ -5,6 +5,7 @@ import (
     "encoding/json"
     "fmt"
     "net/http"
+    "os"
     "path"
     "strconv"
     "strings"
@@ -176,8 +177,23 @@ func (s *Server) NodesListCreateHandler(w http.ResponseWriter, r *http.Request) 
         if req.DashboardPwd != nil {
             dpwd = sql.NullString{String: *req.DashboardPwd, Valid: true}
         }
-        _, err := s.DB.Exec(`INSERT INTO nodes (name, host, api_port, bind_port, tls_enabled, auth_token, dashboard_port, dashboard_user, dashboard_pwd, region, country, city, latitude, longitude, max_connections, weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            req.Name, req.Host, ap, bp, tls, req.AuthToken, dp, du, dpwd, geoRegion, geoCountry, geoCity, lat, lng, maxCon, weight)
+        prStart := sql.NullInt64{}
+        prEnd := sql.NullInt64{}
+        if req.PortRangeStart != nil {
+            prStart = sql.NullInt64{Int64: int64(*req.PortRangeStart), Valid: true}
+        }
+        if req.PortRangeEnd != nil {
+            prEnd = sql.NullInt64{Int64: int64(*req.PortRangeEnd), Valid: true}
+        }
+        if !prStart.Valid && req.BindPort != nil {
+            s, e := detectFrpsPortRange(*req.BindPort)
+            if e > 0 {
+                prStart = sql.NullInt64{Int64: int64(s), Valid: true}
+                prEnd = sql.NullInt64{Int64: int64(e), Valid: true}
+            }
+        }
+        _, err := s.DB.Exec(`INSERT INTO nodes (name, host, api_port, bind_port, tls_enabled, auth_token, dashboard_port, dashboard_user, dashboard_pwd, port_range_start, port_range_end, region, country, city, latitude, longitude, max_connections, weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            req.Name, req.Host, ap, bp, tls, req.AuthToken, dp, du, dpwd, prStart, prEnd, geoRegion, geoCountry, geoCity, lat, lng, maxCon, weight)
         if err != nil {
             writeJSONError(w, "cannot create node", "INTERNAL", http.StatusInternalServerError)
             return
@@ -705,4 +721,48 @@ func (s *Server) NodeBestHandler(w http.ResponseWriter, r *http.Request) {
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(best)
+}
+
+// detectFrpsPortRange scans local frps config files to find allow_ports matching the bind_port.
+func detectFrpsPortRange(bindPort int) (start, end int) {
+    candidates := []string{
+        fmt.Sprintf("/etc/frps.toml"),
+        fmt.Sprintf("/etc/frps-%d.toml", bindPort),
+        fmt.Sprintf("/etc/frps/frps.toml"),
+        fmt.Sprintf("/opt/asyou/frps.toml"),
+    }
+    for _, path := range candidates {
+        data, err := os.ReadFile(path)
+        if err != nil {
+            continue
+        }
+        content := string(data)
+        // Match bind_port in this config
+        if !strings.Contains(content, fmt.Sprintf("bind_port = %d", bindPort)) &&
+            !strings.Contains(content, fmt.Sprintf("bind_port=%d", bindPort)) {
+            continue
+        }
+        // Extract allow_ports value
+        for _, line := range strings.Split(content, "\n") {
+            line = strings.TrimSpace(line)
+            if strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+                continue
+            }
+            if strings.Contains(line, "allow_ports") {
+                parts := strings.SplitN(line, "=", 2)
+                if len(parts) < 2 {
+                    continue
+                }
+                val := strings.TrimSpace(parts[1])
+                val = strings.Trim(val, "\"'")
+                // Parse "31000-31999" or "31000-31999,32000-32099"
+                rangeStr := strings.Split(val, ",")[0]
+                rangeStr = strings.TrimSpace(rangeStr)
+                if n, _ := fmt.Sscanf(rangeStr, "%d-%d", &start, &end); n == 2 {
+                    return start, end
+                }
+            }
+        }
+    }
+    return 0, 0
 }
