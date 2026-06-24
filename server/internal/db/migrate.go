@@ -54,6 +54,8 @@ func RunMigrations(db *sql.DB, _ string) error {
 		if _, err := db.Exec(sqls); err != nil {
 			// Ignore "duplicate column" errors from ALTER TABLE ADD COLUMN
 			if strings.Contains(err.Error(), "duplicate column name") {
+				// Still mark as applied so we don't retry indefinitely
+				db.Exec("INSERT OR REPLACE INTO schema_migrations (version, dirty) VALUES (?, 0)", version)
 				continue
 			}
 			return fmt.Errorf("exec %s: %w", name, err)

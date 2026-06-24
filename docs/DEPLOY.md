@@ -73,7 +73,7 @@ Run the following commands on your server sequentially:
 sudo apt update && sudo apt install -y git golang-go nginx certbot
 
 # === 2. Clone asyou source ===
-git clone https://github.com/your-org/asyou.git /opt/asyou
+git clone https://github.com/Karanzhang/asyou.git /opt/asyou
 cd /opt/asyou
 
 # === 3. Download frp binaries ===
@@ -88,7 +88,7 @@ rm -rf "frp_${VER}_linux_amd64" frp.tar.gz
 
 # === 4. Build asyou server ===
 cd /opt/asyou/server
-go build -o /usr/local/bin/asyou-server ./cmd/server
+sudo go build -o /usr/local/bin/asyou-server ./cmd/server
 
 # === 5. Create data directory ===
 sudo mkdir -p /var/lib/asyou
@@ -113,7 +113,7 @@ allow_ports = "31000-31499"
 
 # Optional: subdomain host — enables http://<subdomain>.<host>/ access
 # Requires DNS wildcard record *.tunnel.example.com → this server
-# subdomain_host = tunnel.example.com
+# subdomain_host = "tunnel.example.com"
 
 # Optional: KCP/QUIC transport
 # kcp_bind_port = 7000
@@ -356,37 +356,8 @@ Assuming your domain is `asyou.example.com`:
 sudo tee /etc/nginx/sites-available/asyou << 'EOF'
 server {
     listen 80;
-    server_name asyou.example.com;
+    server_name asyou.karanz.com;
 
-    # ACME challenge directory
-    location ^~ /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    server_name asyou.example.com;
-
-    # SSL certificate (provisioned with certbot)
-    ssl_certificate /etc/letsencrypt/live/asyou.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/asyou.example.com/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-
-    # Proxy asyou API
-    location /api/ {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Proxy SSE (buffering must be disabled)
     location /api/v1/events {
         proxy_pass http://127.0.0.1:8080;
         proxy_buffering off;
@@ -396,7 +367,14 @@ server {
         chunked_transfer_encoding on;
     }
 
-    # Serve Web Dashboard (static files from web/dist)
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location / {
         root /opt/asyou/web/dist;
         index index.html;
@@ -426,8 +404,19 @@ sudo certbot renew --dry-run
 Skip this step if you don't need the Web UI.
 
 ```bash
+
+# check version
+node -v
+# → show v20.x.x
+
+# if node version < 20, install Node.js 20.x
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+ 
+
 cd /opt/asyou/web
 npm install
+sudo chown -R $(whoami):$(whoami) /opt/asyou/web
 npm run build
 # Static files output to /opt/asyou/web/dist
 # Nginx is already configured to serve these files

@@ -4,6 +4,7 @@ import (
     "database/sql"
     "encoding/json"
     "fmt"
+    "log"
     "net/http"
     "path"
     "strconv"
@@ -38,6 +39,7 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
             rows, err = s.DB.Query(`SELECT id, user_id, node_id, name, type, local_ip, local_port, remote_port, subdomain, custom_domains, enable_tls, status, annotations, created_at, updated_at FROM proxies WHERE user_id = ? ORDER BY id`, userID)
         }
         if err != nil {
+            log.Printf("proxies list query error: %v", err)
             writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
             return
         }
@@ -53,6 +55,7 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
             var createdAt sql.NullString
             var updatedAt sql.NullString
             if err := rows.Scan(&p.ID, &p.UserID, &nodeID, &p.Name, &p.Type, &p.LocalIP, &p.LocalPort, &remotePort, &p.Subdomain, &customDomains, &enableTls, &p.Status, &annotations, &createdAt, &updatedAt); err != nil {
+                log.Printf("proxies list scan error: %v", err)
                 writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
                 return
             }
@@ -113,6 +116,12 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
                     list[idx].Status = "running"
                 }
             }
+        }
+
+        if err := rows.Err(); err != nil {
+            log.Printf("proxies list rows iteration error: %v", err)
+            writeJSONError(w, "internal error", "INTERNAL", http.StatusInternalServerError)
+            return
         }
 
         w.Header().Set("Content-Type", "application/json")

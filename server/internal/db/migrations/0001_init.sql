@@ -55,24 +55,6 @@ CREATE TABLE IF NOT EXISTS nodes (
   updated_at DATETIME
 );
 
--- ALTER TABLE statements for existing databases that were created
--- before these columns were added. The runner ignores "duplicate column" errors.
-ALTER TABLE nodes ADD COLUMN region TEXT DEFAULT '';
-ALTER TABLE nodes ADD COLUMN country TEXT DEFAULT '';
-ALTER TABLE nodes ADD COLUMN city TEXT DEFAULT '';
-ALTER TABLE nodes ADD COLUMN latitude REAL DEFAULT 0;
-ALTER TABLE nodes ADD COLUMN longitude REAL DEFAULT 0;
-ALTER TABLE nodes ADD COLUMN max_connections INTEGER DEFAULT 100;
-ALTER TABLE nodes ADD COLUMN weight REAL DEFAULT 1.0;
-ALTER TABLE nodes ADD COLUMN is_active INTEGER DEFAULT 1;
-ALTER TABLE nodes ADD COLUMN frp_version TEXT DEFAULT '';
-ALTER TABLE nodes ADD COLUMN dashboard_port INTEGER DEFAULT 7500;
-ALTER TABLE nodes ADD COLUMN dashboard_user TEXT DEFAULT 'admin';
-ALTER TABLE nodes ADD COLUMN dashboard_pwd TEXT DEFAULT '';
-ALTER TABLE nodes ADD COLUMN port_range_start INTEGER DEFAULT 31000;
-ALTER TABLE nodes ADD COLUMN port_range_end INTEGER DEFAULT 31999;
-ALTER TABLE nodes ADD COLUMN subdomain_host TEXT DEFAULT '';
-
 -- ============================================================
 -- Node health metrics
 -- ============================================================
