@@ -346,8 +346,16 @@ local_port = %d
 		os.Exit(1)
 	}
 
+	// Get subdomain host from node for Access URL
+	subdomainHost := ""
+	if subdomain != "" && nodeID > 0 {
+		if node, err := client.GetNode(int64(nodeID)); err == nil {
+			subdomainHost = node.SubdomainHost
+		}
+	}
+
 	fmt.Printf("Tunnel #%d '%s' created.\n", proxy.ID, proxy.Name)
-	runFrpc(cfgPath, "", proxy, frpsHost)
+	runFrpc(cfgPath, "", proxy, frpsHost, subdomain, subdomainHost)
 }
 
 func cmdStart() {
@@ -425,12 +433,20 @@ local_port = %d
 		fmt.Fprintf(os.Stderr, "write config failed: %v\n", err)
 		os.Exit(1)
 	}
+	// Get subdomain host from node for Access URL
+	subdomainHost := ""
+	if proxy.Subdomain != nil && *proxy.Subdomain != "" && proxy.NodeID != nil && *proxy.NodeID > 0 {
+		if node, err := client.GetNode(*proxy.NodeID); err == nil {
+			subdomainHost = node.SubdomainHost
+		}
+	}
+
 	fmt.Printf("[asyou] generated config: %s\n", cfgPath)
 
-	runFrpc(cfgPath, "", proxy, frpsHost)
+	runFrpc(cfgPath, "", proxy, frpsHost, safeStr(proxy.Subdomain), subdomainHost)
 }
 
-func runFrpc(cfgPath, frpcPath string, proxy *sdk.Proxy, frpsHost string) {
+func runFrpc(cfgPath, frpcPath string, proxy *sdk.Proxy, frpsHost, subdomain, subdomainHost string) {
 	if frpcPath == "" {
 		candidates := []string{
 			"frpc",
@@ -467,7 +483,10 @@ func runFrpc(cfgPath, frpcPath string, proxy *sdk.Proxy, frpsHost string) {
 	cmd.Stderr = os.Stderr
 	fmt.Printf("Config: %s\n", cfgPath)
 	fmt.Printf("frpc:  %s\n", frpcPath)
-	if proxy.RemotePort != nil && *proxy.RemotePort > 0 {
+	if subdomain != "" && subdomainHost != "" {
+		fmt.Printf("\n🚀 Access your service at:\n")
+		fmt.Printf("   http://%s.%s\n", subdomain, subdomainHost)
+	} else if proxy.RemotePort != nil && *proxy.RemotePort > 0 {
 		fmt.Printf("\n🚀 Access your service at:\n")
 		fmt.Printf("   http://%s:%d\n", frpsHost, *proxy.RemotePort)
 		fmt.Printf("   (Make sure firewall allows port %d)\n", *proxy.RemotePort)
@@ -477,6 +496,13 @@ func runFrpc(cfgPath, frpcPath string, proxy *sdk.Proxy, frpsHost string) {
 		fmt.Fprintf(os.Stderr, "frpc exited: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func safeStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func cmdList() {

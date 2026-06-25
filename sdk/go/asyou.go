@@ -54,11 +54,12 @@ type Proxy struct {
 
 // Node represents a frps server.
 type Node struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	Host     string `json:"host"`
-	BindPort int    `json:"bind_port"`
-	AuthToken string `json:"auth_token,omitempty"`
+	ID            int64  `json:"id"`
+	Name          string `json:"name"`
+	Host          string `json:"host"`
+	BindPort      int    `json:"bind_port"`
+	AuthToken     string `json:"auth_token,omitempty"`
+	SubdomainHost string `json:"subdomain_host,omitempty"`
 }
 
 // NewClient creates a new SDK client pointing at the given server URL.

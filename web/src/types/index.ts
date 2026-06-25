@@ -26,6 +26,7 @@ export interface Node {
   weight?: number
   is_active?: boolean
   score?: number
+  subdomain_host?: string
   last_heartbeat: string
   created_at: string
   updated_at: string

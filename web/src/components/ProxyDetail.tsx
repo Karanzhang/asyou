@@ -80,16 +80,19 @@ export default function ProxyDetail() {
   }
 
   // Build frpc config
-  const frpsHost = proxy.node_id
-    ? nodes.find(n => n.id === proxy.node_id)?.host || window.location.hostname
-    : window.location.hostname
-  const frpsPort = proxy.node_id
-    ? nodes.find(n => n.id === proxy.node_id)?.bind_port || 7000
-    : 7000
-  const frpsToken = proxy.node_id
-    ? nodes.find(n => n.id === proxy.node_id)?.auth_token || ''
-    : ''
+  const currentNode = proxy.node_id ? nodes.find(n => n.id === proxy.node_id) : undefined
+  const frpsHost = currentNode?.host || window.location.hostname
+  const frpsPort = currentNode?.bind_port || 7000
+  const frpsToken = currentNode?.auth_token || ''
+  const subdomainHost = currentNode?.subdomain_host || ''
   const sectionName = proxy.name
+
+  // Build access URL
+  const accessUrl = proxy.subdomain && subdomainHost
+    ? `http://${proxy.subdomain}.${subdomainHost}`
+    : proxy.remote_port
+      ? `http://${frpsHost}:${proxy.remote_port}`
+      : null
   const frpcINI = `[common]
 server_addr = ${frpsHost}
 server_port = ${frpsPort}
@@ -138,8 +141,8 @@ ${proxy.subdomain ? `subdomain = ${proxy.subdomain}` : ''}`
     if (isWin) {
       // Embed INI content as Base64 to avoid batch/ps special char issues
       const iniBase64 = btoa(unescape(encodeURIComponent(frpcINI)))
-      const accessLine = proxy.remote_port
-        ? `echo  Access: http://${frpsHost}:${proxy.remote_port}`
+      const accessLine = accessUrl
+        ? `echo  Access: ${accessUrl}`
         : `echo  Remote port: (assigned by frps, check dashboard)`
       const script = `@echo off
 setlocal
@@ -206,8 +209,8 @@ pause`
       downloadFile(script, `run-${sectionName}.bat`, 'text/plain;charset=utf-8')
     } else {
       const iniBase64 = btoa(unescape(encodeURIComponent(frpcINI)))
-      const unixAccessLine = proxy.remote_port
-        ? `echo "Access: http://${frpsHost}:${proxy.remote_port}"`
+      const unixAccessLine = accessUrl
+        ? `echo "Access: ${accessUrl}"`
         : `echo "Remote port: (assigned by frps, check dashboard)"`
       const script = `#!/bin/sh
 set -e
@@ -285,6 +288,16 @@ exec "$FRPC_PATH" -c "$CONFIG_FILE"`
           <div className="detail-item"><div className="label">Remote Port</div><div className="val">{proxy.remote_port ?? '—'}</div></div>
           <div className="detail-item"><div className="label">Node</div><div className="val">{nodeName}</div></div>
           <div className="detail-item"><div className="label">Subdomain</div><div className="val">{proxy.subdomain ?? '—'}</div></div>
+          {accessUrl && (
+            <div className="detail-item" style={{ gridColumn: 'span 2' }}>
+              <div className="label">Access URL</div>
+              <div className="val">
+                <a href={accessUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                  {accessUrl}
+                </a>
+              </div>
+            </div>
+          )}
           {frpsClientId && <div className="detail-item"><div className="label">frps Client ID</div><div className="val" style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{frpsClientId}</div></div>}
         </div>
       </div>
