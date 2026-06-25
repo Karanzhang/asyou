@@ -136,6 +136,10 @@ func (s *Server) ProxiesListCreateHandler(w http.ResponseWriter, r *http.Request
             writeJSONError(w, "name and local_port required", "BAD_REQUEST", http.StatusBadRequest)
             return
         }
+        if req.Type == "https" {
+            writeJSONError(w, "https tunnel type is not supported, use http instead (TLS is handled by nginx)", "BAD_REQUEST", http.StatusBadRequest)
+            return
+        }
         localIP := "127.0.0.1"
         if req.LocalIP != nil {
             localIP = *req.LocalIP

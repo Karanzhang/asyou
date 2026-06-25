@@ -53,7 +53,7 @@ Usage:
   asyou login <email> <password>          Login to server
   asyou login --api-key <key>             Login with API key
   asyou logout                            Clear saved credentials
-  asyou expose [--n <name>] [--type <tcp|http|https|udp>] [--subdomain <name>] [--node <id>] [--remote-port <port>] <local_port>   Create & start a tunnel
+  asyou expose [--n <name>] [--type <tcp|http|udp>] [--subdomain <name>] [--node <id>] [--remote-port <port>] <local_port>   Create & start a tunnel
   asyou list                              List your tunnels
   asyou delete <id>                       Delete a tunnel
   asyou start <id>                        Start frpc for an existing tunnel
@@ -180,9 +180,13 @@ func cmdExpose() {
 		case "--type":
 			if i+1 < len(rawArgs) {
 				tunnelType = rawArgs[i+1]
+				if tunnelType == "https" {
+					fmt.Fprintln(os.Stderr, "error: https type is not supported, use http instead (TLS is handled by nginx)")
+					os.Exit(1)
+				}
 				i++
 			} else {
-				fmt.Fprintln(os.Stderr, "error: --type requires a value (tcp, http, https, udp)")
+				fmt.Fprintln(os.Stderr, "error: --type requires a value (tcp, http, udp)")
 				os.Exit(1)
 			}
 		case "--subdomain":
@@ -198,7 +202,7 @@ func cmdExpose() {
 		}
 	}
 	if len(positional) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: asyou expose [--n <name>] [--type <tcp|http|https|udp>] [--subdomain <name>] [--node <id>] [--remote-port <port>] <local_port>")
+		fmt.Fprintln(os.Stderr, "Usage: asyou expose [--n <name>] [--type <tcp|http|udp>] [--subdomain <name>] [--node <id>] [--remote-port <port>] <local_port>")
 		os.Exit(1)
 	}
 
@@ -329,7 +333,7 @@ local_ip = 127.0.0.1
 local_port = %d
 `, frpsHost, frpsPort, tokenLine, tunnelName, tunnelType, port)
 	// Add subdomain for http/https types
-	if subdomain != "" && (tunnelType == "http" || tunnelType == "https") {
+	if subdomain != "" && tunnelType == "http" {
 		iniContent += fmt.Sprintf("subdomain = %s\n", subdomain)
 	}
 	// Add remote_port for tcp/udp types or when explicitly specified

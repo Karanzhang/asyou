@@ -175,7 +175,7 @@ function CreateProxyForm({ nodes, onDone, onToast, navigate }: { nodes: AsyouNod
             <select value={type} onChange={e => setType(e.target.value)}>
               <option value="tcp">TCP</option>
               <option value="http">HTTP</option>
-              <option value="https">HTTPS</option>
+
               <option value="udp">UDP</option>
             </select>
           </div>
@@ -191,11 +191,11 @@ function CreateProxyForm({ nodes, onDone, onToast, navigate }: { nodes: AsyouNod
             </small>
           </div>
           <div className="form-group">
-            <label>Subdomain (optional) {type !== 'http' && type !== 'https' && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(HTTP/HTTPS only)</span>}</label>
+            <label>Subdomain (optional) {type !== 'http' && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(HTTP only)</span>}</label>
             <input value={subdomain} onChange={e => setSubdomain(e.target.value)}
-              disabled={type !== 'http' && type !== 'https'}
-              placeholder={type === 'http' || type === 'https' ? 'e.g. myapp' : 'only for HTTP/HTTPS'}
-              style={{ opacity: type !== 'http' && type !== 'https' ? 0.5 : 1 }} />
+              disabled={type !== 'http'}
+              placeholder={type === 'http' ? 'e.g. myapp' : 'only for HTTP'}
+              style={{ opacity: type !== 'http' ? 0.5 : 1 }} />
           </div>
           <div className="form-group">
             <label>Node</label>
