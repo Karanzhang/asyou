@@ -1,12 +1,18 @@
 package main
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	sdk "github.com/asyou/sdk-go"
@@ -472,15 +478,21 @@ func runFrpc(cfgPath, frpcPath string, proxy *sdk.Proxy, frpsHost, subdomain, su
 		}
 	}
 	if frpcPath == "" {
-		fmt.Fprintln(os.Stderr, "Error: frpc not found.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Install frpc manually:")
-		fmt.Fprintln(os.Stderr, "  Windows: Download from https://github.com/fatedier/frp/releases")
-		fmt.Fprintln(os.Stderr, "           and place frpc.exe in C:\\Windows\\System32\\")
-		fmt.Fprintln(os.Stderr, "  Linux:   sudo cp frpc /usr/local/bin/frpc")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintf(os.Stderr, "Or run frpc directly with the config at:\n  %s -c %s\n", "frpc", cfgPath)
-		os.Exit(1)
+		fmt.Println("[asyou] frpc not found, downloading...")
+		var err error
+		frpcPath, err = downloadFrpc()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to download frpc: %v\n", err)
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "You can also install frpc manually:")
+			fmt.Fprintln(os.Stderr, "  Windows: Download from https://github.com/fatedier/frp/releases")
+			fmt.Fprintln(os.Stderr, "           and place frpc.exe in C:\\Windows\\System32\\")
+			fmt.Fprintln(os.Stderr, "  Linux:   sudo cp frpc /usr/local/bin/frpc")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintf(os.Stderr, "Or run frpc directly with the config at:\n  %s -c %s\n", "frpc", cfgPath)
+			os.Exit(1)
+		}
+		fmt.Printf("[asyou] frpc saved to %s\n", frpcPath)
 	}
 	cmd := exec.Command(frpcPath, "-c", cfgPath)
 	cmd.Stdout = os.Stdout
@@ -500,6 +512,167 @@ func runFrpc(cfgPath, frpcPath string, proxy *sdk.Proxy, frpsHost, subdomain, su
 		fmt.Fprintf(os.Stderr, "frpc exited: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+const frpVersion = "0.69.1"
+
+// downloadFrpc downloads the frpc binary for the current OS/arch,
+// extracts it, and caches it in the config directory.
+func downloadFrpc() (string, error) {
+	arch := runtime.GOARCH
+	if arch == "amd64" {
+		arch = "amd64"
+	} else if arch == "386" {
+		arch = "386"
+	} else if arch == "arm64" {
+		arch = "arm64"
+	} else {
+		arch = "amd64" // fallback
+	}
+
+	osName := runtime.GOOS
+	var ext, pkgExt string
+	var isWin bool
+	switch osName {
+	case "windows":
+		ext = ".exe"
+		pkgExt = "zip"
+		isWin = true
+	case "darwin":
+		pkgExt = "tar.gz"
+		osName = "darwin"
+	default:
+		pkgExt = "tar.gz"
+		osName = "linux"
+	}
+
+	pkgName := fmt.Sprintf("frp_%s_%s_%s.%s", frpVersion, osName, arch, pkgExt)
+	url := fmt.Sprintf("https://github.com/fatedier/frp/releases/download/v%s/%s", frpVersion, pkgName)
+
+	// Download to temp file
+	tmpDir, err := os.MkdirTemp("", "asyou-frpc")
+	if err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tmpPkg := filepath.Join(tmpDir, pkgName)
+	fmt.Printf("[asyou] downloading %s ...\n", url)
+	out, err := os.Create(tmpPkg)
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+
+	resp, err := http.Get(url)
+	if err != nil {
+		out.Close()
+		return "", fmt.Errorf("download: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		out.Close()
+		return "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
+	}
+
+	written, err := io.Copy(out, resp.Body)
+	out.Close()
+	if err != nil {
+		return "", fmt.Errorf("save archive: %w", err)
+	}
+	fmt.Printf("[asyou] downloaded %d bytes\n", written)
+
+	// Extract frpc binary
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		cacheDir = filepath.Dir(configPath())
+	}
+	frpcDir := filepath.Join(cacheDir, "asyou")
+	os.MkdirAll(frpcDir, 0755)
+	frpcPath := filepath.Join(frpcDir, "frpc"+ext)
+
+	folderPrefix := fmt.Sprintf("frp_%s_%s_%s/", frpVersion, osName, arch)
+
+	if isWin {
+		err = extractFrpcFromZip(tmpPkg, folderPrefix, frpcPath)
+	} else {
+		err = extractFrpcFromTarGz(tmpPkg, folderPrefix, frpcPath)
+	}
+	if err != nil {
+		return "", fmt.Errorf("extract frpc: %w", err)
+	}
+
+	return frpcPath, nil
+}
+
+func extractFrpcFromZip(zipPath, folderPrefix, dest string) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	targetName := folderPrefix + "frpc.exe"
+	for _, f := range r.File {
+		if f.Name != targetName {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		defer rc.Close()
+
+		out, err := os.Create(dest)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+
+		_, err = io.Copy(out, rc)
+		return err
+	}
+	return fmt.Errorf("frpc.exe not found in archive")
+}
+
+func extractFrpcFromTarGz(tarGzPath, folderPrefix, dest string) error {
+	f, err := os.Open(tarGzPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gzr, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gzr.Close()
+
+	tarr := tar.NewReader(gzr)
+	for {
+		header, err := tarr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if header.Name != folderPrefix+"frpc" {
+			continue
+		}
+		out, err := os.Create(dest)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+
+		_, err = io.Copy(out, tarr)
+		if err != nil {
+			return err
+		}
+		return os.Chmod(dest, 0755)
+	}
+	return fmt.Errorf("frpc not found in archive")
 }
 
 func safeStr(s *string) string {
