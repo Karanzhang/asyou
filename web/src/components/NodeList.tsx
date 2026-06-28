@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { listNodes, createNode, deleteNode, getNodeStatus } from '../api/client'
+import { listNodes, createNode, updateNode, deleteNode, getNodeStatus } from '../api/client'
 import type { Node as AsyouNode, NodeStatusResponse, User } from '../types'
 
 export default function NodeList({ user }: { user: User | null }) {
@@ -7,6 +7,7 @@ export default function NodeList({ user }: { user: User | null }) {
   const [nodes, setNodes] = useState<AsyouNode[]>([])
   const [statuses, setStatuses] = useState<Record<number, NodeStatusResponse>>({})
   const [showCreate, setShowCreate] = useState(false)
+  const [editNodeId, setEditNodeId] = useState<number | null>(null)
   const [detailNodeId, setDetailNodeId] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null)
 
@@ -155,9 +156,25 @@ export default function NodeList({ user }: { user: User | null }) {
                         {n.last_heartbeat ? new Date(n.last_heartbeat).toLocaleString() : '—'}
                       </td>
                       <td onClick={e => e.stopPropagation()}>
-                        {isAdmin && <button className="btn btn-danger btn-sm" onClick={() => handleDelete(n.id)}>Delete</button>}
+                        {isAdmin && (
+                          <>
+                            <button className="btn btn-outline btn-sm" onClick={() => setEditNodeId(editNodeId === n.id ? null : n.id)} style={{ marginRight: '0.4rem' }}>Edit</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(n.id)}>Delete</button>
+                          </>
+                        )}
                       </td>
                     </tr>
+                    {editNodeId === n.id && (
+                      <tr key={`${n.id}-edit`}>
+                        <td colSpan={9} style={{ padding: 0, background: 'var(--bg)' }}>
+                          <EditNodeForm
+                            node={n}
+                            onDone={() => { setEditNodeId(null); load() }}
+                            onToast={showToast}
+                          />
+                        </td>
+                      </tr>
+                    )}
                     {isDetail && st?.proxies && st.proxies.length > 0 && (
                       <tr key={`${n.id}-detail`}>
                         <td colSpan={9} style={{ padding: 0, background: 'var(--bg)' }}>
@@ -237,6 +254,7 @@ function CreateNodeForm({ onDone, onToast }: { onDone: () => void; onToast: (m: 
   const [longitude, setLongitude] = useState('')
   const [maxConnections, setMaxConnections] = useState('')
   const [weight, setWeight] = useState('1.0')
+  const [subdomainHost, setSubdomainHost] = useState('')
   const [busy, setBusy] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -259,6 +277,7 @@ function CreateNodeForm({ onDone, onToast }: { onDone: () => void; onToast: (m: 
       if (longitude) body.longitude = parseFloat(longitude)
       if (maxConnections) body.max_connections = parseInt(maxConnections)
       if (weight) body.weight = parseFloat(weight)
+      if (subdomainHost) body.subdomain_host = subdomainHost
       await createNode(body)
       onToast('Node created')
       onDone()
@@ -307,6 +326,11 @@ function CreateNodeForm({ onDone, onToast }: { onDone: () => void; onToast: (m: 
             <div className="form-group">
               <label>Dashboard Password</label>
               <input type="password" value={dashboardPwd} onChange={e => setDashboardPwd(e.target.value)} placeholder="frps dashboard password" />
+            </div>
+            <div className="form-group">
+              <label>Subdomain Host</label>
+              <input value={subdomainHost} onChange={e => setSubdomainHost(e.target.value)} placeholder="e.g. tunnel.example.com" />
+              <small style={{ color: 'var(--text-muted)' }}>DNS wildcard *.subdomain_host → this node</small>
             </div>
           </div>
         </fieldset>
@@ -357,6 +381,78 @@ function CreateNodeForm({ onDone, onToast }: { onDone: () => void; onToast: (m: 
             {busy ? 'Creating…' : 'Create'}
           </button>
           <button className="btn btn-outline" type="button" onClick={onDone}>Cancel</button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function EditNodeForm({ node, onDone, onToast }: { node: AsyouNode; onDone: () => void; onToast: (m: string, t?: string) => void }) {
+  const [subdomainHost, setSubdomainHost] = useState(node.subdomain_host || '')
+  const [dashboardUser, setDashboardUser] = useState(node.dashboard_user || '')
+  const [dashboardPwd, setDashboardPwd] = useState('')
+  const [authToken, setAuthToken] = useState('')
+  const [weight, setWeight] = useState(node.weight?.toString() || '1.0')
+  const [maxConnections, setMaxConnections] = useState(node.max_connections?.toString() || '')
+  const [busy, setBusy] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const body: Record<string, any> = {}
+      if (subdomainHost) body.subdomain_host = subdomainHost
+      if (dashboardUser) body.dashboard_user = dashboardUser
+      if (dashboardPwd) body.dashboard_pwd = dashboardPwd
+      if (authToken) body.auth_token = authToken
+      if (weight) body.weight = parseFloat(weight)
+      if (maxConnections) body.max_connections = parseInt(maxConnections)
+      await updateNode(node.id, body)
+      onToast('Node updated')
+      onDone()
+    } catch (err: any) {
+      onToast(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ padding: '1rem 1.5rem' }}>
+      <h4 style={{ marginBottom: '0.8rem' }}>Edit Node: {node.name}</h4>
+      <form onSubmit={handleSubmit}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+          <div className="form-group">
+            <label>Subdomain Host</label>
+            <input value={subdomainHost} onChange={e => setSubdomainHost(e.target.value)} placeholder="tunnel.example.com" />
+            <small style={{ color: 'var(--text-muted)' }}>DNS wildcard *.subdomain_host → this node</small>
+          </div>
+          <div className="form-group">
+            <label>Dashboard User</label>
+            <input value={dashboardUser} onChange={e => setDashboardUser(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Dashboard Password</label>
+            <input type="password" value={dashboardPwd} onChange={e => setDashboardPwd(e.target.value)} placeholder="leave blank to keep" />
+          </div>
+          <div className="form-group">
+            <label>Auth Token</label>
+            <input value={authToken} onChange={e => setAuthToken(e.target.value)} placeholder="leave blank to keep" />
+          </div>
+          <div className="form-group">
+            <label>Weight</label>
+            <input type="number" step="0.1" min="0.1" value={weight} onChange={e => setWeight(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Max Connections</label>
+            <input type="number" value={maxConnections} onChange={e => setMaxConnections(e.target.value)} placeholder="100" />
+          </div>
+        </div>
+        <div style={{ marginTop: '0.8rem' }}>
+          <button className="btn btn-primary btn-sm" type="submit" disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+          <button className="btn btn-outline btn-sm" type="button" onClick={onDone} style={{ marginLeft: '0.4rem' }}>Cancel</button>
         </div>
       </form>
     </div>

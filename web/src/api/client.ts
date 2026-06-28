@@ -74,6 +74,13 @@ export function createNode(data: Partial<Node>) {
   })
 }
 
+export function updateNode(id: number, data: Partial<Node>) {
+  return request<Node>(`/nodes/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
 export function deleteNode(id: number) {
   return request<void>(`/nodes/${id}`, { method: 'DELETE' })
 }
